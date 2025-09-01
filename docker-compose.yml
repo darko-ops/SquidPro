@@ -1,0 +1,24 @@
+version: "3.9"
+services:
+  squidpro-api:
+    build: ./squidpro-api
+    environment:
+      - SQUIDPRO_SECRET=supersecret_change_me
+      - PRICE_PER_QUERY_USD=0.005
+      - SUPPLIER_SPLIT=0.7
+      - REVIEWER_SPLIT=0.2
+      - SQUIDPRO_SPLIT=0.1
+      - COLLECTOR_CRYPTO_URL=http://collector-crypto:8200
+    ports:
+      - "8100:8100"
+    depends_on:
+      - collector-crypto
+    restart: unless-stopped
+
+  collector-crypto:
+    build: ./collector-crypto
+    environment:
+      - SEED=42
+    ports:
+      - "8200:8200"
+    restart: unless-stopped
