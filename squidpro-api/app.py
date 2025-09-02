@@ -1,8 +1,16 @@
-import os, time, uuid, jwt, httpx
+import os, time, uuid, jwt, httpx, asyncpg
 from fastapi import FastAPI, Header, HTTPException, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, List, Dict, Any
+from contextlib import asynccontextmanager
+import asyncio
+import logging
+from stellar_sdk import Keypair, Network, Server, TransactionBuilder, Asset
+from stellar_sdk.exceptions import SdkError
+from decimal import Decimal
+
+logging.basicConfig(level=logging.INFO)
 
 SECRET = os.getenv("SQUIDPRO_SECRET", "supersecret_change_me")
 PRICE = float(os.getenv("PRICE_PER_QUERY_USD", "0.005"))
@@ -10,13 +18,76 @@ SPLIT_SUPPLIER = float(os.getenv("SUPPLIER_SPLIT", "0.7"))
 SPLIT_REVIEWER = float(os.getenv("REVIEWER_SPLIT", "0.2"))
 SPLIT_SQUIDPRO = float(os.getenv("SQUIDPRO_SPLIT", "0.1"))
 COLLECTOR = os.getenv("COLLECTOR_CRYPTO_URL", "http://collector-crypto:8200")
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://squidpro:password@postgres:5432/squidpro")
 
-api = FastAPI(title="SquidPro", version="0.1.0")
+# Stellar configuration
+STELLAR_SECRET_KEY = os.getenv("STELLAR_SECRET_KEY", "SAMPLEKEY123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890AB")
+STELLAR_NETWORK = os.getenv("STELLAR_NETWORK", "testnet")
+USDC_ASSET_CODE = os.getenv("USDC_ASSET_CODE", "USDC")
+USDC_ASSET_ISSUER = os.getenv("USDC_ASSET_ISSUER", "GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5")
+
+# Stellar setup
+try:
+    stellar_keypair = Keypair.from_secret(STELLAR_SECRET_KEY)
+    stellar_server = Server("https://horizon-testnet.stellar.org") if STELLAR_NETWORK == "testnet" else Server("https://horizon.stellar.org")
+    usdc_asset = Asset(USDC_ASSET_CODE, USDC_ASSET_ISSUER)
+    logging.info(f"Stellar initialized - Public Key: {stellar_keypair.public_key}")
+except Exception as e:
+    logging.error(f"Failed to initialize Stellar: {e}")
+    stellar_keypair = None
+
+# Database connection pool
+db_pool = None
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup with retry logic
+    global db_pool
+    max_retries = 10
+    retry_delay = 2
+    
+    for attempt in range(max_retries):
+        try:
+            logging.info(f"Attempting to connect to database (attempt {attempt + 1}/{max_retries})")
+            db_pool = await asyncpg.create_pool(DATABASE_URL)
+            logging.info("Successfully connected to database")
+            break
+        except Exception as e:
+            logging.warning(f"Database connection failed: {e}")
+            if attempt == max_retries - 1:
+                logging.error("Max retries reached, giving up")
+                raise
+            logging.info(f"Retrying in {retry_delay} seconds...")
+            await asyncio.sleep(retry_delay)
+    
+    yield
+    
+    # Shutdown
+    if db_pool:
+        await db_pool.close()
+
+api = FastAPI(title="SquidPro", version="0.1.0", lifespan=lifespan)
 
 class MintReq(BaseModel):
     agent_id: str
     scope: str = "data.read.price"
     credits: float = 1.0  # demo-only credits in response
+
+class SupplierRegistration(BaseModel):
+    name: str
+    email: str
+    stellar_address: str
+
+class DataPackage(BaseModel):
+    name: str
+    description: str
+    category: str
+    endpoint_url: str
+    price_per_query: float = 0.005
+    sample_data: Optional[Dict[str, Any]] = None
+    schema_definition: Optional[Dict[str, Any]] = None
+    rate_limit: int = 1000
+    tags: List[str] = []
 
 @api.get("/health")
 def health():
@@ -48,28 +119,519 @@ def _auth(auth_header: Optional[str]):
         raise HTTPException(status_code=401, detail=f"Invalid token: {e}")
     return claims
 
-@api.get("/data/price")
-async def get_price(pair: str = Query("BTCUSDT"), Authorization: Optional[str] = Header(None)):
+async def update_balances(supplier_amt: float, reviewer_pool: float, squidpro_amt: float, supplier_id: str = "1"):
+    """Update balances for supplier, reviewer pool, and squidpro treasury"""
+    async with db_pool.acquire() as conn:
+        # Update supplier balance by ID
+        await conn.execute("""
+            INSERT INTO balances (user_type, user_id, balance_usd) 
+            VALUES ('supplier', $1, $2)
+            ON CONFLICT (user_type, user_id) 
+            DO UPDATE SET balance_usd = balances.balance_usd + $2
+        """, supplier_id, supplier_amt)
+        
+        await conn.execute("""
+            INSERT INTO balances (user_type, user_id, balance_usd) 
+            VALUES ('reviewer', 'demo_reviewer_pool', $1)
+            ON CONFLICT (user_type, user_id) 
+            DO UPDATE SET balance_usd = balances.balance_usd + $1
+        """, reviewer_pool)
+        
+        await conn.execute("""
+            INSERT INTO balances (user_type, user_id, balance_usd) 
+            VALUES ('squidpro', 'treasury', $1)
+            ON CONFLICT (user_type, user_id) 
+            DO UPDATE SET balance_usd = balances.balance_usd + $1
+        """, squidpro_amt)
+
+@api.get("/data/package/{package_id}")
+async def query_package_data(package_id: int, Authorization: Optional[str] = Header(None)):
+    """Query data from a specific package"""
     claims = _auth(Authorization)
     if claims.get("scope") != "data.read.price":
         raise HTTPException(status_code=403, detail="Scope not allowed for this endpoint")
-    # Call collector
-    async with httpx.AsyncClient(timeout=5.0) as client:
-        r = await client.get(f"{COLLECTOR}/price", params={"pair": pair})
+    
+    async with db_pool.acquire() as conn:
+        # Get package details
+        package = await conn.fetchrow("""
+            SELECT p.*, s.id as supplier_id
+            FROM data_packages p
+            JOIN suppliers s ON p.supplier_id = s.id
+            WHERE p.id = $1 AND p.status = 'active' AND s.status = 'active'
+        """, package_id)
+        
+        if not package:
+            raise HTTPException(status_code=404, detail="Package not found or inactive")
+        
+        # Call the package's endpoint
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            r = await client.get(package["endpoint_url"])
+        
+        if r.status_code != 200:
+            raise HTTPException(status_code=502, detail="Package endpoint error")
+        
+        data = r.json()
+        
+        # Calculate payout splits using package pricing
+        price = float(package["price_per_query"])
+        supplier_amt = round(price * SPLIT_SUPPLIER, 6)
+        reviewer_pool = round(price * SPLIT_REVIEWER, 6)
+        squidpro_amt = round(price * SPLIT_SQUIDPRO, 6)
+        
+        # Update balances
+        await update_balances(supplier_amt, reviewer_pool, squidpro_amt, str(package["supplier_id"]))
+        
+        # Log the query
+        await conn.execute("""
+            INSERT INTO query_history (package_id, agent_id, response_size, cost, trace_id)
+            VALUES ($1, $2, $3, $4, $5)
+        """, package_id, claims["sub"], len(str(data)), price, claims["trace_id"])
+        
+        receipt = {
+            "trace_id": claims["trace_id"],
+            "package_id": package_id,
+            "package_name": package["name"],
+            "ts": int(time.time()),
+            "data": data,
+            "cost": price,
+            "payout": {"supplier": supplier_amt, "reviewer_pool": reviewer_pool, "squidpro": squidpro_amt}
+        }
+        return JSONResponse(receipt)
+
+# Legacy endpoint - maintain backward compatibility
+@api.get("/data/price")
+async def get_price(pair: str = Query("BTCUSDT"), Authorization: Optional[str] = Header(None)):
+    """Legacy price endpoint - queries the first crypto package"""
+    claims = _auth(Authorization)
+    if claims.get("scope") != "data.read.price":
+        raise HTTPException(status_code=403, detail="Scope not allowed for this endpoint")
+    
+    # Find first crypto price package
+    async with db_pool.acquire() as conn:
+        package = await conn.fetchrow("""
+            SELECT p.*, s.id as supplier_id
+            FROM data_packages p
+            JOIN suppliers s ON p.supplier_id = s.id
+            WHERE p.category = 'financial' AND p.tags && ARRAY['crypto', 'prices']
+            AND p.status = 'active' AND s.status = 'active'
+            ORDER BY p.created_at
+            LIMIT 1
+        """)
+    
+    if not package:
+        # Fallback to original collector
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            r = await client.get(f"{COLLECTOR}/price", params={"pair": pair})
+        if r.status_code != 200:
+            raise HTTPException(status_code=502, detail="Collector error")
+        data = r.json()
+        
+        # Use default pricing and supplier
+        await update_balances(
+            round(PRICE * SPLIT_SUPPLIER, 6),
+            round(PRICE * SPLIT_REVIEWER, 6), 
+            round(PRICE * SPLIT_SQUIDPRO, 6),
+            "1"
+        )
+        
+        receipt = {
+            "trace_id": claims["trace_id"],
+            "pair": pair,
+            "ts": int(time.time()),
+            "price": data["price"],
+            "volume": data["volume"],
+            "cost": PRICE,
+            "payout": {
+                "supplier": round(PRICE * SPLIT_SUPPLIER, 6),
+                "reviewer_pool": round(PRICE * SPLIT_REVIEWER, 6),
+                "squidpro": round(PRICE * SPLIT_SQUIDPRO, 6)
+            }
+        }
+        return JSONResponse(receipt)
+    
+    # Use package system
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        r = await client.get(package["endpoint_url"], params={"pair": pair})
+    
     if r.status_code != 200:
-        raise HTTPException(status_code=502, detail="Collector error")
+        raise HTTPException(status_code=502, detail="Package endpoint error")
+    
     data = r.json()
-    # Compute payout splits (demo calculation; not persisted)
-    supplier_amt = round(PRICE * SPLIT_SUPPLIER, 6)
-    reviewer_pool = round(PRICE * SPLIT_REVIEWER, 6)
-    squidpro_amt = round(PRICE * SPLIT_SQUIDPRO, 6)
+    price = float(package["price_per_query"])
+    supplier_amt = round(price * SPLIT_SUPPLIER, 6)
+    reviewer_pool = round(price * SPLIT_REVIEWER, 6)
+    squidpro_amt = round(price * SPLIT_SQUIDPRO, 6)
+    
+    await update_balances(supplier_amt, reviewer_pool, squidpro_amt, str(package["supplier_id"]))
+    
     receipt = {
         "trace_id": claims["trace_id"],
         "pair": pair,
         "ts": int(time.time()),
         "price": data["price"],
         "volume": data["volume"],
-        "cost": PRICE,
+        "cost": price,
         "payout": {"supplier": supplier_amt, "reviewer_pool": reviewer_pool, "squidpro": squidpro_amt}
     }
     return JSONResponse(receipt)
+
+@api.get("/balances")
+async def get_balances():
+    """Get all current balances - useful for monitoring"""
+    async with db_pool.acquire() as conn:
+        rows = await conn.fetch("SELECT user_type, user_id, balance_usd FROM balances ORDER BY user_type, user_id")
+        return [{"type": row["user_type"], "id": row["user_id"], "balance": float(row["balance_usd"])} for row in rows]
+
+@api.get("/balances/{user_type}/{user_id}")
+async def get_balance(user_type: str, user_id: str):
+    """Get balance for specific user"""
+    async with db_pool.acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT balance_usd, payout_threshold_usd FROM balances WHERE user_type = $1 AND user_id = $2",
+            user_type, user_id
+        )
+        if not row:
+            raise HTTPException(status_code=404, detail="User not found")
+async def send_stellar_payment(recipient_address: str, amount_usd: float) -> str:
+    """Send USDC payment via Stellar and return transaction hash"""
+    if not stellar_keypair:
+        raise Exception("Stellar not properly initialized")
+    
+    try:
+        # Get account info
+        source_account = stellar_server.load_account(stellar_keypair.public_key)
+        
+        # Build transaction
+        transaction = (
+            TransactionBuilder(
+                source_account=source_account,
+                network_passphrase=Network.TESTNET_NETWORK_PASSPHRASE if STELLAR_NETWORK == "testnet" else Network.PUBLIC_NETWORK_PASSPHRASE,
+                base_fee=100,  # 100 stroops base fee
+            )
+            .add_text_memo(f"SquidPro payout ${amount_usd:.6f}")
+            .append_payment_op(
+                destination=recipient_address,
+                asset=Asset.native(),  # Use native XLM instead of USDC
+                amount=str(amount_usd)
+            )
+            .set_timeout(30)
+            .build()
+        )
+        
+        # Sign and submit
+        transaction.sign(stellar_keypair)
+        response = stellar_server.submit_transaction(transaction)
+        
+        return response["hash"]
+        
+    except SdkError as e:
+        logging.error(f"Stellar payment failed: {e}")
+        raise Exception(f"Payment failed: {str(e)}")
+    except Exception as e:
+        logging.error(f"Unexpected payment error: {e}")
+        raise Exception(f"Payment failed: {str(e)}")
+
+async def process_payouts():
+    """Check for accounts ready for payout and process them"""
+    if not stellar_keypair:
+        logging.warning("Stellar not initialized, skipping payouts")
+        return {"processed": 0, "message": "Stellar not configured"}
+    
+    async with db_pool.acquire() as conn:
+        # Find accounts eligible for payout
+        eligible_accounts = await conn.fetch("""
+            SELECT user_type, user_id, balance_usd, payout_threshold_usd
+            FROM balances 
+            WHERE balance_usd >= payout_threshold_usd AND balance_usd > 0
+        """)
+        
+        processed = 0
+        results = []
+        
+        for account in eligible_accounts:
+            user_type = account["user_type"]
+            user_id = account["user_id"]
+            balance = float(account["balance_usd"])
+            
+            # Skip SquidPro treasury (we don't pay ourselves out)
+            if user_type == "squidpro":
+                continue
+                
+            # Get recipient address
+            recipient_address = await get_user_stellar_address(conn, user_type, user_id)
+            if not recipient_address:
+                results.append({
+                    "user": f"{user_type}/{user_id}",
+                    "status": "skipped",
+                    "reason": "No Stellar address on file"
+                })
+                continue
+            
+            try:
+                # Send payment
+                tx_hash = await send_stellar_payment(recipient_address, balance)
+                
+                # Record successful payout
+                await conn.execute("""
+                    INSERT INTO payout_history (stellar_tx_hash, recipient_address, amount_usd, user_type, user_id)
+                    VALUES ($1, $2, $3, $4, $5)
+                """, tx_hash, recipient_address, balance, user_type, user_id)
+                
+                # Zero out balance
+                await conn.execute("""
+                    UPDATE balances SET balance_usd = 0 WHERE user_type = $1 AND user_id = $2
+                """, user_type, user_id)
+                
+                processed += 1
+                results.append({
+                    "user": f"{user_type}/{user_id}",
+                    "amount": balance,
+                    "tx_hash": tx_hash,
+                    "status": "success"
+                })
+                
+                logging.info(f"Paid out ${balance} to {user_type}/{user_id} - TX: {tx_hash}")
+                
+            except Exception as e:
+                results.append({
+                    "user": f"{user_type}/{user_id}",
+                    "status": "failed",
+                    "error": str(e)
+                })
+                logging.error(f"Payout failed for {user_type}/{user_id}: {e}")
+        
+        return {"processed": processed, "results": results}
+
+async def get_user_stellar_address(conn, user_type: str, user_id: str) -> Optional[str]:
+    """Get user's Stellar address from database"""
+    if user_type == "supplier":
+        row = await conn.fetchrow("SELECT stellar_address FROM suppliers WHERE id = $1", int(user_id))
+    elif user_type == "reviewer":
+        row = await conn.fetchrow("SELECT stellar_address FROM reviewers WHERE name = $1", user_id)
+    else:
+        return None
+    
+    return row["stellar_address"] if row else None
+
+@api.get("/balances/{user_type}/{user_id}")
+async def get_balance(user_type: str, user_id: str):
+    """Get balance for specific user"""
+    async with db_pool.acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT balance_usd, payout_threshold_usd FROM balances WHERE user_type = $1 AND user_id = $2",
+            user_type, user_id
+        )
+        if not row:
+            raise HTTPException(status_code=404, detail="User not found")
+        return {
+            "user_type": user_type,
+            "user_id": user_id,
+            "balance": float(row["balance_usd"]),
+            "payout_threshold": float(row["payout_threshold_usd"])
+        }
+
+# Supplier Management Endpoints
+
+@api.post("/suppliers/register")
+async def register_supplier(supplier: SupplierRegistration):
+    """Register a new data supplier"""
+    import secrets
+    
+    async with db_pool.acquire() as conn:
+        # Generate API key
+        api_key = f"sup_{secrets.token_urlsafe(16)}"
+        
+        # Insert supplier
+        supplier_id = await conn.fetchval("""
+            INSERT INTO suppliers (name, email, stellar_address, api_key)
+            VALUES ($1, $2, $3, $4)
+            RETURNING id
+        """, supplier.name, supplier.email, supplier.stellar_address, api_key)
+        
+        # Create balance entry
+        await conn.execute("""
+            INSERT INTO balances (user_type, user_id, payout_threshold_usd)
+            VALUES ('supplier', $1, 25.00)
+        """, str(supplier_id))
+        
+        return {
+            "supplier_id": supplier_id,
+            "api_key": api_key,
+            "status": "registered",
+            "message": "Supplier registered successfully. Save your API key securely."
+        }
+
+async def authenticate_supplier(api_key: str):
+    """Authenticate supplier by API key"""
+    if not api_key or not api_key.startswith('sup_'):
+        raise HTTPException(status_code=401, detail="Invalid supplier API key")
+    
+    async with db_pool.acquire() as conn:
+        supplier = await conn.fetchrow("""
+            SELECT id, name, status FROM suppliers WHERE api_key = $1 AND status = 'active'
+        """, api_key)
+        
+        if not supplier:
+            raise HTTPException(status_code=401, detail="Invalid or inactive supplier")
+        
+        return supplier
+
+@api.get("/suppliers/me")
+async def get_supplier_info(x_api_key: Optional[str] = Header(None)):
+    """Get supplier information"""
+    supplier = await authenticate_supplier(x_api_key)
+    
+    async with db_pool.acquire() as conn:
+        # Get supplier details and package count
+        supplier_info = await conn.fetchrow("""
+            SELECT s.*, 
+                   COUNT(p.id) as package_count,
+                   b.balance_usd,
+                   b.payout_threshold_usd
+            FROM suppliers s
+            LEFT JOIN data_packages p ON s.id = p.supplier_id
+            LEFT JOIN balances b ON s.id::text = b.user_id AND b.user_type = 'supplier'
+            WHERE s.id = $1
+            GROUP BY s.id, b.balance_usd, b.payout_threshold_usd
+        """, supplier["id"])
+        
+        return {
+            "id": supplier_info["id"],
+            "name": supplier_info["name"],
+            "email": supplier_info["email"],
+            "stellar_address": supplier_info["stellar_address"],
+            "status": supplier_info["status"],
+            "package_count": supplier_info["package_count"] or 0,
+            "balance": float(supplier_info["balance_usd"] or 0),
+            "payout_threshold": float(supplier_info["payout_threshold_usd"] or 25.00),
+            "created_at": supplier_info["created_at"].isoformat()
+        }
+
+@api.post("/suppliers/packages")
+async def create_package(package: DataPackage, x_api_key: Optional[str] = Header(None)):
+    """Create a new data package"""
+    supplier = await authenticate_supplier(x_api_key)
+    
+    async with db_pool.acquire() as conn:
+        package_id = await conn.fetchval("""
+            INSERT INTO data_packages (
+                supplier_id, name, description, category, endpoint_url,
+                price_per_query, sample_data, schema_definition, rate_limit, tags
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            RETURNING id
+        """, supplier["id"], package.name, package.description, package.category,
+        package.endpoint_url, package.price_per_query, package.sample_data,
+        package.schema_definition, package.rate_limit, package.tags)
+        
+        return {
+            "package_id": package_id,
+            "status": "created",
+            "message": "Data package created successfully"
+        }
+
+@api.get("/packages")
+async def list_packages(category: Optional[str] = None, tag: Optional[str] = None):
+    """List all available data packages"""
+    async with db_pool.acquire() as conn:
+        query = """
+            SELECT p.*, s.name as supplier_name
+            FROM data_packages p
+            JOIN suppliers s ON p.supplier_id = s.id
+            WHERE p.status = 'active' AND s.status = 'active'
+        """
+        params = []
+        
+        if category:
+            query += " AND p.category = $1"
+            params.append(category)
+        
+        if tag:
+            query += f" AND ${'2' if category else '1'} = ANY(p.tags)"
+            params.append(tag)
+        
+        query += " ORDER BY p.created_at DESC"
+        
+        packages = await conn.fetch(query, *params)
+        
+        return [
+            {
+                "id": pkg["id"],
+                "name": pkg["name"],
+                "description": pkg["description"],
+                "category": pkg["category"],
+                "supplier": pkg["supplier_name"],
+                "price_per_query": float(pkg["price_per_query"]),
+                "sample_data": pkg["sample_data"],
+                "tags": pkg["tags"],
+                "rate_limit": pkg["rate_limit"]
+            }
+            for pkg in packages
+        ]
+
+@api.get("/packages/{package_id}")
+async def get_package(package_id: int):
+    """Get detailed package information"""
+    async with db_pool.acquire() as conn:
+        package = await conn.fetchrow("""
+            SELECT p.*, s.name as supplier_name
+            FROM data_packages p
+            JOIN suppliers s ON p.supplier_id = s.id
+            WHERE p.id = $1 AND p.status = 'active' AND s.status = 'active'
+        """, package_id)
+        
+        if not package:
+            raise HTTPException(status_code=404, detail="Package not found")
+        
+        return {
+            "id": package["id"],
+            "name": package["name"],
+            "description": package["description"],
+            "category": package["category"],
+            "supplier": package["supplier_name"],
+            "price_per_query": float(package["price_per_query"]),
+            "sample_data": package["sample_data"],
+            "schema_definition": package["schema_definition"],
+            "tags": package["tags"],
+            "rate_limit": package["rate_limit"],
+            "created_at": package["created_at"].isoformat()
+        }
+
+@api.post("/admin/process-payouts")
+async def trigger_payouts():
+    """Manually trigger payout processing (admin endpoint)"""
+    result = await process_payouts()
+    return result
+
+@api.get("/payout-history")
+async def get_payout_history():
+    """Get recent payout history"""
+    async with db_pool.acquire() as conn:
+        rows = await conn.fetch("""
+            SELECT stellar_tx_hash, recipient_address, amount_usd, user_type, user_id, created_at
+            FROM payout_history 
+            ORDER BY created_at DESC 
+            LIMIT 50
+        """)
+        return [
+            {
+                "tx_hash": row["stellar_tx_hash"],
+                "recipient": row["recipient_address"],
+                "amount": float(row["amount_usd"]),
+                "user": f"{row['user_type']}/{row['user_id']}",
+                "timestamp": row["created_at"].isoformat()
+            }
+            for row in rows
+        ]
+
+@api.get("/stellar/info")
+async def stellar_info():
+    """Get Stellar configuration info"""
+    if not stellar_keypair:
+        return {"status": "not_configured", "message": "Stellar not initialized"}
+    
+    return {
+        "status": "configured",
+        "public_key": stellar_keypair.public_key,
+        "network": STELLAR_NETWORK,
+        "payment_asset": "XLM (native)"
+    }
