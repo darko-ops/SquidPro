@@ -78,6 +78,100 @@ CREATE TABLE query_history (
     created_at TIMESTAMP DEFAULT NOW()
 );
 
+-- Add these tables to your existing schema.sql
+
+-- Review tasks - automatically generated or manually created
+CREATE TABLE review_tasks (
+    id SERIAL PRIMARY KEY,
+    package_id INTEGER REFERENCES data_packages(id),
+    task_type VARCHAR(50) CHECK (task_type IN ('accuracy', 'freshness', 'schema', 'consensus', 'spot_audit')),
+    status VARCHAR(20) DEFAULT 'open' CHECK (status IN ('open', 'in_progress', 'completed', 'expired')),
+    required_reviews INTEGER DEFAULT 3, -- how many reviewers needed for consensus
+    reward_pool_usd DECIMAL(10,6) DEFAULT 0.05, -- total payout for this task
+    reference_query JSONB, -- the query to test (params, expected structure)
+    expires_at TIMESTAMP DEFAULT (NOW() + INTERVAL '24 hours'),
+    created_at TIMESTAMP DEFAULT NOW(),
+    created_by VARCHAR(20) DEFAULT 'system' -- 'system' or 'manual'
+);
+
+-- Individual review submissions
+CREATE TABLE review_submissions (
+    id SERIAL PRIMARY KEY,
+    task_id INTEGER REFERENCES review_tasks(id),
+    reviewer_id INTEGER REFERENCES reviewers(id),
+    quality_score INTEGER CHECK (quality_score BETWEEN 1 AND 10), -- 1=terrible, 10=perfect
+    timeliness_score INTEGER CHECK (timeliness_score BETWEEN 1 AND 10),
+    schema_compliance_score INTEGER CHECK (schema_compliance_score BETWEEN 1 AND 10),
+    overall_rating INTEGER CHECK (overall_rating BETWEEN 1 AND 10),
+    evidence JSONB, -- their test data, comparisons, notes
+    findings TEXT, -- written assessment
+    test_timestamp TIMESTAMP, -- when they ran their verification
+    submitted_at TIMESTAMP DEFAULT NOW(),
+    is_consensus BOOLEAN DEFAULT FALSE, -- true if this matches majority opinion
+    payout_earned DECIMAL(10,6) DEFAULT 0
+);
+
+-- Package quality scores (aggregated from reviews)
+CREATE TABLE package_quality_scores (
+    id SERIAL PRIMARY KEY,
+    package_id INTEGER REFERENCES data_packages(id) UNIQUE,
+    avg_quality_score DECIMAL(3,2) DEFAULT 0,
+    avg_timeliness_score DECIMAL(3,2) DEFAULT 0,
+    avg_schema_score DECIMAL(3,2) DEFAULT 0,
+    overall_rating DECIMAL(3,2) DEFAULT 0,
+    total_reviews INTEGER DEFAULT 0,
+    last_reviewed TIMESTAMP,
+    quality_trend VARCHAR(20) DEFAULT 'stable', -- 'improving', 'declining', 'stable'
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Reviewer reputation and stats
+CREATE TABLE reviewer_stats (
+    id SERIAL PRIMARY KEY,
+    reviewer_id INTEGER REFERENCES reviewers(id) UNIQUE,
+    total_reviews INTEGER DEFAULT 0,
+    consensus_rate DECIMAL(3,2) DEFAULT 0, -- % of time they agree with majority
+    accuracy_score DECIMAL(3,2) DEFAULT 0, -- how often their assessments prove correct
+    total_earned DECIMAL(10,6) DEFAULT 0,
+    avg_review_time_minutes INTEGER DEFAULT 0,
+    specializations TEXT[], -- categories they're good at
+    reputation_level VARCHAR(20) DEFAULT 'novice', -- 'novice', 'experienced', 'expert', 'master'
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Reviewer disputes (when reviewers disagree significantly)
+CREATE TABLE review_disputes (
+    id SERIAL PRIMARY KEY,
+    task_id INTEGER REFERENCES review_tasks(id),
+    dispute_reason TEXT,
+    status VARCHAR(20) DEFAULT 'open' CHECK (status IN ('open', 'resolved', 'escalated')),
+    resolution_notes TEXT,
+    resolved_by VARCHAR(50),
+    created_at TIMESTAMP DEFAULT NOW(),
+    resolved_at TIMESTAMP
+);
+
+-- Add reputation level to existing reviewers table
+ALTER TABLE reviewers ADD COLUMN IF NOT EXISTS reputation_level VARCHAR(20) DEFAULT 'novice';
+ALTER TABLE reviewers ADD COLUMN IF NOT EXISTS specializations TEXT[];
+ALTER TABLE reviewers ADD COLUMN IF NOT EXISTS api_key VARCHAR(64);
+
+-- Insert some demo review tasks
+INSERT INTO review_tasks (package_id, task_type, reward_pool_usd, reference_query) VALUES 
+(1, 'accuracy', 0.05, '{"endpoint": "/price", "params": {"pair": "BTCUSDT"}, "expected_fields": ["price", "volume", "ts"]}'),
+(1, 'freshness', 0.03, '{"endpoint": "/price", "params": {"pair": "ETHUSDT"}, "max_age_seconds": 30}'),
+(1, 'schema', 0.02, '{"endpoint": "/price", "params": {"pair": "ADAUSDT"}, "schema_check": true}');
+
+-- Initialize quality scores for existing packages
+INSERT INTO package_quality_scores (package_id) 
+SELECT id FROM data_packages ON CONFLICT (package_id) DO NOTHING;
+
+-- Add index for performance
+CREATE INDEX idx_review_tasks_status ON review_tasks(status);
+CREATE INDEX idx_review_submissions_task ON review_submissions(task_id);
+CREATE INDEX idx_package_quality_package ON package_quality_scores(package_id);
+
+
 -- Insert demo suppliers and reviewers with Stellar addresses
 INSERT INTO suppliers (name, stellar_address, email, api_key) VALUES 
 ('demo_supplier', 'GDXDSB444OLNDYOJAVGU3JWQO4BEGQT2MCVTDHLOWORRQODJJXO3GBDU', 'demo@cryptodata.io', 'sup_demo_12345'),
