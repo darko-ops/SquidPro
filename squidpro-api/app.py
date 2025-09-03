@@ -1,22 +1,17 @@
-import os, time, uuid, jwt, httpx, asyncpg
+import os, time, uuid, jwt, httpx, asyncpg, json
 from fastapi import FastAPI, Header, HTTPException, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 from contextlib import asynccontextmanager
+from fastapi.staticfiles import StaticFiles
 import asyncio
 import logging
+import secrets
+import statistics
 from stellar_sdk import Keypair, Network, Server, TransactionBuilder, Asset
 from stellar_sdk.exceptions import SdkError
 from decimal import Decimal
-# Add these imports to the top of squidpro-api/app.py
-from pydantic import BaseModel
-from typing import Optional, List, Dict, Any
-import secrets
-import statistics
-
-
-
 
 logging.basicConfig(level=logging.INFO)
 
@@ -76,10 +71,27 @@ async def lifespan(app: FastAPI):
 
 api = FastAPI(title="SquidPro", version="0.1.0", lifespan=lifespan)
 
+api.mount("/", StaticFiles(directory="public", html=True), name="static")
+
+# Pydantic Models
 class MintReq(BaseModel):
     agent_id: str
     scope: str = "data.read.price"
-    credits: float = 1.0  # demo-only credits in response
+    credits: float = 1.0
+
+class ReviewerRegistration(BaseModel):
+    name: str
+    stellar_address: str
+    email: Optional[str] = None
+    specializations: List[str] = []
+
+class ReviewSubmission(BaseModel):
+    quality_score: int
+    timeliness_score: int
+    schema_compliance_score: int
+    overall_rating: int
+    findings: str
+    evidence: Optional[Dict[str, Any]] = None
 
 class SupplierRegistration(BaseModel):
     name: str
@@ -97,23 +109,7 @@ class DataPackage(BaseModel):
     rate_limit: int = 1000
     tags: List[str] = []
 
-
-# Add these Pydantic models after your existing models
-class ReviewerRegistration(BaseModel):
-    name: str
-    stellar_address: str
-    email: Optional[str] = None
-    specializations: List[str] = []
-
-class ReviewSubmission(BaseModel):
-    quality_score: int
-    timeliness_score: int
-    schema_compliance_score: int
-    overall_rating: int
-    findings: str
-    evidence: Optional[Dict[str, Any]] = None
-
-# Add these endpoints to your squidpro-api/app.py
+# Reviewer System Endpoints
 
 @api.post("/reviewers/register")
 async def register_reviewer(reviewer: ReviewerRegistration):
@@ -290,7 +286,6 @@ async def submit_review(
         if existing:
             raise HTTPException(status_code=409, detail="Already submitted review for this task")
         
-       
         # Insert the review
         submission_id = await conn.fetchval("""
             INSERT INTO review_submissions (
@@ -301,7 +296,7 @@ async def submit_review(
             RETURNING id
         """, task_id, reviewer["id"], review.quality_score, review.timeliness_score,
         review.schema_compliance_score, review.overall_rating, review.findings, 
-        review.evidence)
+        json.dumps(review.evidence) if review.evidence else None)
         
         # Check if we now have enough reviews to process consensus
         review_count = await conn.fetchval("""
@@ -515,7 +510,7 @@ async def create_review_task(
             INSERT INTO review_tasks (package_id, task_type, required_reviews, reward_pool_usd, reference_query, created_by)
             VALUES ($1, $2, $3, $4, $5, 'manual')
             RETURNING id
-        """, package_id, task_type, required_reviews, reward_pool, reference_query)
+        """, package_id, task_type, required_reviews, reward_pool, json.dumps(reference_query))
         
         return {
             "task_id": task_id,
@@ -523,9 +518,9 @@ async def create_review_task(
             "package": package["name"],
             "reward_pool": reward_pool
         }
-    
 
-    
+# Original SquidPro Endpoints
+
 @api.get("/health")
 def health():
     return {"ok": True}
@@ -635,7 +630,6 @@ async def query_package_data(package_id: int, Authorization: Optional[str] = Hea
         }
         return JSONResponse(receipt)
 
-# Legacy endpoint - maintain backward compatibility
 @api.get("/data/price")
 async def get_price(pair: str = Query("BTCUSDT"), Authorization: Optional[str] = Header(None)):
     """Legacy price endpoint - queries the first crypto package"""
@@ -729,137 +723,6 @@ async def get_balance(user_type: str, user_id: str):
         )
         if not row:
             raise HTTPException(status_code=404, detail="User not found")
-async def send_stellar_payment(recipient_address: str, amount_usd: float) -> str:
-    """Send USDC payment via Stellar and return transaction hash"""
-    if not stellar_keypair:
-        raise Exception("Stellar not properly initialized")
-    
-    try:
-        # Get account info
-        source_account = stellar_server.load_account(stellar_keypair.public_key)
-        
-        # Build transaction
-        transaction = (
-            TransactionBuilder(
-                source_account=source_account,
-                network_passphrase=Network.TESTNET_NETWORK_PASSPHRASE if STELLAR_NETWORK == "testnet" else Network.PUBLIC_NETWORK_PASSPHRASE,
-                base_fee=100,  # 100 stroops base fee
-            )
-            .add_text_memo(f"SquidPro payout ${amount_usd:.6f}")
-            .append_payment_op(
-                destination=recipient_address,
-                asset=Asset.native(),  # Use native XLM instead of USDC
-                amount=str(amount_usd)
-            )
-            .set_timeout(30)
-            .build()
-        )
-        
-        # Sign and submit
-        transaction.sign(stellar_keypair)
-        response = stellar_server.submit_transaction(transaction)
-        
-        return response["hash"]
-        
-    except SdkError as e:
-        logging.error(f"Stellar payment failed: {e}")
-        raise Exception(f"Payment failed: {str(e)}")
-    except Exception as e:
-        logging.error(f"Unexpected payment error: {e}")
-        raise Exception(f"Payment failed: {str(e)}")
-
-async def process_payouts():
-    """Check for accounts ready for payout and process them"""
-    if not stellar_keypair:
-        logging.warning("Stellar not initialized, skipping payouts")
-        return {"processed": 0, "message": "Stellar not configured"}
-    
-    async with db_pool.acquire() as conn:
-        # Find accounts eligible for payout
-        eligible_accounts = await conn.fetch("""
-            SELECT user_type, user_id, balance_usd, payout_threshold_usd
-            FROM balances 
-            WHERE balance_usd >= payout_threshold_usd AND balance_usd > 0
-        """)
-        
-        processed = 0
-        results = []
-        
-        for account in eligible_accounts:
-            user_type = account["user_type"]
-            user_id = account["user_id"]
-            balance = float(account["balance_usd"])
-            
-            # Skip SquidPro treasury (we don't pay ourselves out)
-            if user_type == "squidpro":
-                continue
-                
-            # Get recipient address
-            recipient_address = await get_user_stellar_address(conn, user_type, user_id)
-            if not recipient_address:
-                results.append({
-                    "user": f"{user_type}/{user_id}",
-                    "status": "skipped",
-                    "reason": "No Stellar address on file"
-                })
-                continue
-            
-            try:
-                # Send payment
-                tx_hash = await send_stellar_payment(recipient_address, balance)
-                
-                # Record successful payout
-                await conn.execute("""
-                    INSERT INTO payout_history (stellar_tx_hash, recipient_address, amount_usd, user_type, user_id)
-                    VALUES ($1, $2, $3, $4, $5)
-                """, tx_hash, recipient_address, balance, user_type, user_id)
-                
-                # Zero out balance
-                await conn.execute("""
-                    UPDATE balances SET balance_usd = 0 WHERE user_type = $1 AND user_id = $2
-                """, user_type, user_id)
-                
-                processed += 1
-                results.append({
-                    "user": f"{user_type}/{user_id}",
-                    "amount": balance,
-                    "tx_hash": tx_hash,
-                    "status": "success"
-                })
-                
-                logging.info(f"Paid out ${balance} to {user_type}/{user_id} - TX: {tx_hash}")
-                
-            except Exception as e:
-                results.append({
-                    "user": f"{user_type}/{user_id}",
-                    "status": "failed",
-                    "error": str(e)
-                })
-                logging.error(f"Payout failed for {user_type}/{user_id}: {e}")
-        
-        return {"processed": processed, "results": results}
-
-async def get_user_stellar_address(conn, user_type: str, user_id: str) -> Optional[str]:
-    """Get user's Stellar address from database"""
-    if user_type == "supplier":
-        row = await conn.fetchrow("SELECT stellar_address FROM suppliers WHERE id = $1", int(user_id))
-    elif user_type == "reviewer":
-        row = await conn.fetchrow("SELECT stellar_address FROM reviewers WHERE name = $1", user_id)
-    else:
-        return None
-    
-    return row["stellar_address"] if row else None
-
-@api.get("/balances/{user_type}/{user_id}")
-async def get_balance(user_type: str, user_id: str):
-    """Get balance for specific user"""
-    async with db_pool.acquire() as conn:
-        row = await conn.fetchrow(
-            "SELECT balance_usd, payout_threshold_usd FROM balances WHERE user_type = $1 AND user_id = $2",
-            user_type, user_id
-        )
-        if not row:
-            raise HTTPException(status_code=404, detail="User not found")
         return {
             "user_type": user_type,
             "user_id": user_id,
@@ -872,8 +735,6 @@ async def get_balance(user_type: str, user_id: str):
 @api.post("/suppliers/register")
 async def register_supplier(supplier: SupplierRegistration):
     """Register a new data supplier"""
-    import secrets
-    
     async with db_pool.acquire() as conn:
         # Generate API key
         api_key = f"sup_{secrets.token_urlsafe(16)}"
@@ -1032,6 +893,129 @@ async def get_package(package_id: int):
             "rate_limit": package["rate_limit"],
             "created_at": package["created_at"].isoformat()
         }
+
+# Stellar Payment Functions
+
+async def send_stellar_payment(recipient_address: str, amount_usd: float) -> str:
+    """Send XLM payment via Stellar and return transaction hash"""
+    if not stellar_keypair:
+        raise Exception("Stellar not properly initialized")
+    
+    try:
+        # Get account info
+        source_account = stellar_server.load_account(stellar_keypair.public_key)
+        
+        # Build transaction
+        transaction = (
+            TransactionBuilder(
+                source_account=source_account,
+                network_passphrase=Network.TESTNET_NETWORK_PASSPHRASE if STELLAR_NETWORK == "testnet" else Network.PUBLIC_NETWORK_PASSPHRASE,
+                base_fee=100,  # 100 stroops base fee
+            )
+            .add_text_memo(f"SquidPro payout ${amount_usd:.6f}")
+            .append_payment_op(
+                destination=recipient_address,
+                asset=Asset.native(),  # Use native XLM
+                amount=str(amount_usd)
+            )
+            .set_timeout(30)
+            .build()
+        )
+        
+        # Sign and submit
+        transaction.sign(stellar_keypair)
+        response = stellar_server.submit_transaction(transaction)
+        
+        return response["hash"]
+        
+    except SdkError as e:
+        logging.error(f"Stellar payment failed: {e}")
+        raise Exception(f"Payment failed: {str(e)}")
+    except Exception as e:
+        logging.error(f"Unexpected payment error: {e}")
+        raise Exception(f"Payment failed: {str(e)}")
+
+async def get_user_stellar_address(conn, user_type: str, user_id: str) -> Optional[str]:
+    """Get user's Stellar address from database"""
+    if user_type == "supplier":
+        row = await conn.fetchrow("SELECT stellar_address FROM suppliers WHERE id = $1", int(user_id))
+    elif user_type == "reviewer":
+        row = await conn.fetchrow("SELECT stellar_address FROM reviewers WHERE id = $1", int(user_id))
+    else:
+        return None
+    
+    return row["stellar_address"] if row else None
+
+async def process_payouts():
+    """Check for accounts ready for payout and process them"""
+    if not stellar_keypair:
+        logging.warning("Stellar not initialized, skipping payouts")
+        return {"processed": 0, "message": "Stellar not configured"}
+    
+    async with db_pool.acquire() as conn:
+        # Find accounts eligible for payout
+        eligible_accounts = await conn.fetch("""
+            SELECT user_type, user_id, balance_usd, payout_threshold_usd
+            FROM balances 
+            WHERE balance_usd >= payout_threshold_usd AND balance_usd > 0
+        """)
+        
+        processed = 0
+        results = []
+        
+        for account in eligible_accounts:
+            user_type = account["user_type"]
+            user_id = account["user_id"]
+            balance = float(account["balance_usd"])
+            
+            # Skip SquidPro treasury (we don't pay ourselves out)
+            if user_type == "squidpro":
+                continue
+                
+            # Get recipient address
+            recipient_address = await get_user_stellar_address(conn, user_type, user_id)
+            if not recipient_address:
+                results.append({
+                    "user": f"{user_type}/{user_id}",
+                    "status": "skipped",
+                    "reason": "No Stellar address on file"
+                })
+                continue
+            
+            try:
+                # Send payment
+                tx_hash = await send_stellar_payment(recipient_address, balance)
+                
+                # Record successful payout
+                await conn.execute("""
+                    INSERT INTO payout_history (stellar_tx_hash, recipient_address, amount_usd, user_type, user_id)
+                    VALUES ($1, $2, $3, $4, $5)
+                """, tx_hash, recipient_address, balance, user_type, user_id)
+                
+                # Zero out balance
+                await conn.execute("""
+                    UPDATE balances SET balance_usd = 0 WHERE user_type = $1 AND user_id = $2
+                """, user_type, user_id)
+                
+                processed += 1
+                results.append({
+                    "user": f"{user_type}/{user_id}",
+                    "amount": balance,
+                    "tx_hash": tx_hash,
+                    "status": "success"
+                })
+                
+                logging.info(f"Paid out ${balance} to {user_type}/{user_id} - TX: {tx_hash}")
+                
+            except Exception as e:
+                results.append({
+                    "user": f"{user_type}/{user_id}",
+                    "status": "failed",
+                    "error": str(e)
+                })
+                logging.error(f"Payout failed for {user_type}/{user_id}: {e}")
+        
+        return {"processed": processed, "results": results}
 
 @api.post("/admin/process-payouts")
 async def trigger_payouts():
