@@ -1,0 +1,850 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Profile - SquidPro</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <style>
+
+        :root {
+            --bg-primary: #ffffff;
+            --bg-secondary: #fafafa;
+            --bg-tertiary: #f8f8f8;
+            --text-primary: #000000;
+            --text-secondary: #666666;
+            --text-tertiary: #999999;
+            --border-primary: #f0f0f0;
+            --border-secondary: #e0e0e0;
+            --accent: #00bcd4;
+            --accent-hover: #00acc1;
+            --success: #00c851;
+            --warning: #ff9f43;
+        }
+
+        [data-theme="dark"] {
+            --bg-primary: #000000;
+            --bg-secondary: #111111;
+            --bg-tertiary: #1a1a1a;
+            --text-primary: #ffffff;
+            --text-secondary: #cccccc;
+            --text-tertiary: #999999;
+            --border-primary: #2a2a2a;
+            --border-secondary: #333333;
+            --accent: #00bcd4;
+            --accent-hover: #00e5ff;
+            --success: #00c851;
+            --warning: #ff9f43;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            font-weight: 300;
+            line-height: 1.5;
+            min-height: 100vh;
+            transition: background-color 0.3s ease, color 0.3s ease;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 2rem;
+        }
+
+        /* Header */
+        .header {
+            border-bottom: 1px solid var(--border-primary);
+            padding: 2rem 0;
+            transition: border-color 0.3s ease;
+        }
+
+        .header-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            font-family: 'Magz', 'Inter', sans-serif;
+            font-size: 2rem;
+            font-weight: 800;
+            color: var(--text-primary);
+            letter-spacing: -0.02em;
+            text-decoration: none;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 2rem;
+            align-items: center;
+        }
+
+        .nav-link {
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-weight: 400;
+            transition: color 0.3s ease;
+        }
+
+        .nav-link:hover, .nav-link.active {
+            color: var(--accent);
+        }
+        .nav-link:hover, .nav-link.active {
+            color: var(--accent);
+        }
+
+        @media (max-width: 768px) {
+    .nav-links {
+        display: none;
+    }
+}
+
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 1.5rem;
+        }
+
+        .theme-toggle {
+            background: none;
+            border: 1px solid var(--border-secondary);
+            color: var(--text-secondary);
+            padding: 0.5rem;
+            cursor: pointer;
+            font-size: 0.875rem;
+            transition: all 0.3s ease;
+            min-width: 2.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .theme-toggle:hover {
+            border-color: var(--accent);
+            color: var(--accent);
+        }
+
+        /* Main Content */
+        .main {
+            padding: 3rem 0;
+        }
+
+        .profile-header {
+            text-align: center;
+            margin-bottom: 3rem;
+        }
+
+        .profile-title {
+            font-size: 2.5rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            letter-spacing: -0.03em;
+            color: var(--text-primary);
+        }
+
+        .profile-subtitle {
+            color: var(--text-secondary);
+            font-size: 1rem;
+            font-weight: 400;
+        }
+
+        /* Login Section */
+        .login-section {
+            max-width: 400px;
+            margin: 0 auto;
+            padding: 2rem;
+            border: 1px solid var(--border-primary);
+            background: var(--bg-secondary);
+            transition: all 0.3s ease;
+        }
+
+        .login-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            color: var(--text-primary);
+            text-align: center;
+        }
+
+        .user-type-selector {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 0.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .user-type-btn {
+            padding: 0.75rem;
+            border: 1px solid var(--border-secondary);
+            background: transparent;
+            color: var(--text-secondary);
+            cursor: pointer;
+            font-size: 0.875rem;
+            transition: all 0.3s ease;
+        }
+
+        .user-type-btn.active {
+            background: var(--text-primary);
+            color: var(--bg-primary);
+            border-color: var(--text-primary);
+        }
+
+        .form-group {
+            margin-bottom: 1rem;
+        }
+
+        .form-group label {
+            display: block;
+            font-size: 0.875rem;
+            font-weight: 500;
+            margin-bottom: 0.5rem;
+            color: var(--text-primary);
+        }
+
+        .form-input {
+            width: 100%;
+            padding: 0.75rem 0;
+            border: none;
+            border-bottom: 1px solid var(--border-secondary);
+            background: transparent;
+            font-size: 1rem;
+            font-family: inherit;
+            font-weight: 300;
+            color: var(--text-primary);
+            transition: border-color 0.2s ease;
+        }
+
+        .form-input:focus {
+            outline: none;
+            border-bottom-color: var(--accent);
+        }
+
+        .form-input::placeholder {
+            color: var(--text-tertiary);
+        }
+
+        .login-btn {
+            width: 100%;
+            padding: 1rem;
+            background: var(--text-primary);
+            color: var(--bg-primary);
+            border: none;
+            font-size: 0.875rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-top: 1rem;
+        }
+
+        .login-btn:hover {
+            background: var(--text-secondary);
+        }
+
+        /* Profile Content */
+        .profile-content {
+            display: grid;
+            grid-template-columns: 1fr 2fr;
+            gap: 3rem;
+        }
+
+        .profile-sidebar {
+            display: flex;
+            flex-direction: column;
+            gap: 2rem;
+        }
+
+        .profile-card, .stats-card, .activity-card {
+            border: 1px solid var(--border-primary);
+            padding: 2rem;
+            background: var(--bg-primary);
+            transition: all 0.3s ease;
+        }
+
+        .card-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin-bottom: 1.5rem;
+            color: var(--text-primary);
+        }
+
+        .profile-info {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .info-label {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+            font-weight: 500;
+        }
+
+        .info-value {
+            font-size: 0.875rem;
+            color: var(--text-primary);
+            font-weight: 600;
+        }
+
+        .balance-highlight {
+            font-size: 1.5rem;
+            color: var(--success);
+            font-weight: 700;
+        }
+
+        .reputation-badge {
+            padding: 0.25rem 0.5rem;
+            font-size: 0.75rem;
+            border: 1px solid var(--accent);
+            color: var(--accent);
+            font-weight: 500;
+            text-transform: capitalize;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 1.5rem;
+        }
+
+        .stat-item {
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-bottom: 0.25rem;
+        }
+
+        .stat-label {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            font-weight: 500;
+        }
+
+        .activity-list {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .activity-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem;
+            border: 1px solid var(--border-primary);
+            background: var(--bg-secondary);
+            transition: all 0.3s ease;
+        }
+
+        .activity-item:hover {
+            border-color: var(--accent);
+        }
+
+        .activity-info {
+            flex: 1;
+        }
+
+        .activity-title {
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 0.25rem;
+        }
+
+        .activity-meta {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+        }
+
+        .activity-amount {
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: var(--success);
+        }
+
+        .error-message, .loading-message {
+            text-align: center;
+            padding: 2rem;
+            color: var(--text-secondary);
+            font-style: italic;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 1rem;
+            margin-top: 2rem;
+        }
+
+        .btn {
+            padding: 0.75rem 1.5rem;
+            border: 1px solid var(--text-primary);
+            background: transparent;
+            color: var(--text-primary);
+            font-size: 0.875rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+        }
+
+        .btn-primary {
+            background: var(--text-primary);
+            color: var(--bg-primary);
+        }
+
+        .btn:hover {
+            border-color: var(--accent);
+            color: var(--accent);
+        }
+
+        .btn-primary:hover {
+            background: var(--text-secondary);
+            color: var(--bg-primary);
+        }
+
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            .container {
+                padding: 0 1rem;
+            }
+
+            .profile-content {
+                grid-template-columns: 1fr;
+                gap: 2rem;
+            }
+
+            .nav-links {
+                display: none;
+            }
+
+            .user-type-selector {
+                grid-template-columns: 1fr;
+            }
+
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .activity-item {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 0.5rem;
+            }
+
+            .action-buttons {
+                flex-direction: column;
+            }
+        }
+
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<header class="header">
+    <div class="container">
+        <div class="header-content">
+            <a href="/" class="logo">SquidPro</a>
+            <div class="nav-links">
+                <a href="/" class="nav-link active">Catalog</a>
+                <a href="/profile.html" class="nav-link">Profile</a>
+            </div>
+            <div class="header-right">
+                <button class="theme-toggle" onclick="toggleTheme()" title="Toggle dark mode">
+                    <span id="theme-icon">☾</span>
+                </button>
+                <div class="api-status">
+                    <div class="status-dot"></div>
+                    <span id="api-status-text">Connected</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</header>
+    <main class="main">
+        <div class="container">
+            <div class="profile-header">
+                <h1 class="profile-title">Your Profile</h1>
+                <p class="profile-subtitle">Manage your account and view your activity</p>
+            </div>
+
+            <!-- Login Section (shown when not authenticated) -->
+            <div id="login-section" class="login-section">
+                <h2 class="login-title">Access Your Profile</h2>
+                
+                <div class="user-type-selector">
+                    <button class="user-type-btn active" onclick="selectUserType('reviewer')" id="reviewer-btn">
+                        Reviewer
+                    </button>
+                    <button class="user-type-btn" onclick="selectUserType('supplier')" id="supplier-btn">
+                        Supplier
+                    </button>
+                    <button class="user-type-btn" onclick="selectUserType('agent')" id="agent-btn">
+                        Agent
+                    </button>
+                </div>
+
+                <form onsubmit="login(event)">
+                    <div class="form-group">
+                        <label for="api-key">API Key</label>
+                        <input 
+                            type="password" 
+                            id="api-key" 
+                            class="form-input" 
+                            placeholder="Enter your API key..."
+                            required
+                        >
+                    </div>
+                    
+                    <button type="submit" class="login-btn">
+                        Access Profile
+                    </button>
+                </form>
+
+                <div class="action-buttons">
+                    <a href="/" class="btn">← Back to Catalog</a>
+                    <button class="btn btn-primary" onclick="showRegisterInfo()">
+                        New User?
+                    </button>
+                </div>
+            </div>
+
+            <!-- Profile Content (shown when authenticated) -->
+            <div id="profile-content" class="profile-content hidden">
+                <div class="profile-sidebar">
+                    <div class="profile-card">
+                        <h2 class="card-title">Account Information</h2>
+                        <div class="profile-info" id="profile-info">
+                            <div class="loading-message">Loading profile...</div>
+                        </div>
+                    </div>
+
+                    <div class="stats-card">
+                        <h2 class="card-title">Statistics</h2>
+                        <div class="stats-grid" id="stats-grid">
+                            <div class="loading-message">Loading stats...</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="activity-card">
+                    <h2 class="card-title">Recent Activity</h2>
+                    <div class="activity-list" id="activity-list">
+                        <div class="loading-message">Loading activity...</div>
+                    </div>
+                    
+                    <div class="action-buttons">
+                        <button class="btn" onclick="logout()">
+                            Sign Out
+                        </button>
+                        <button class="btn btn-primary" onclick="refreshProfile()">
+                            Refresh Data
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        const API_BASE = 'http://localhost:8100';
+        let currentUser = null;
+        let userType = 'reviewer';
+
+        function selectUserType(type) {
+            userType = type;
+            
+            // Update button states
+            document.querySelectorAll('.user-type-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            document.getElementById(`${type}-btn`).classList.add('active');
+            
+            // Update placeholder text
+            const input = document.getElementById('api-key');
+            if (type === 'reviewer') {
+                input.placeholder = 'Enter your reviewer API key (rev_...)';
+            } else if (type === 'supplier') {
+                input.placeholder = 'Enter your supplier API key (sup_...)';
+            } else {
+                input.placeholder = 'Enter your agent token or API key...';
+            }
+        }
+
+        async function login(event) {
+            event.preventDefault();
+            const apiKey = document.getElementById('api-key').value.trim();
+            
+            if (!apiKey) {
+                alert('Please enter your API key');
+                return;
+            }
+
+            try {
+                let endpoint = '';
+                if (userType === 'reviewer') {
+                    endpoint = '/reviewers/me';
+                } else if (userType === 'supplier') {
+                    endpoint = '/suppliers/me';
+                } else {
+                    // For agents, we'll show a simpler profile
+                    showAgentProfile(apiKey);
+                    return;
+                }
+
+                const response = await fetch(`${API_BASE}${endpoint}`, {
+                    headers: {
+                        'X-API-Key': apiKey
+                    }
+                });
+
+                if (response.ok) {
+                    currentUser = await response.json();
+                    currentUser.apiKey = apiKey;
+                    currentUser.type = userType;
+                    
+                    showProfile();
+                    loadProfileData();
+                } else {
+                    const error = await response.text();
+                    alert(`Login failed: ${error}`);
+                }
+            } catch (error) {
+                alert(`Login error: ${error.message}`);
+            }
+        }
+
+        function showAgentProfile(apiKey) {
+            currentUser = {
+                type: 'agent',
+                apiKey: apiKey,
+                name: 'AI Agent',
+                id: 'agent-' + Math.random().toString(36).substr(2, 9)
+            };
+            showProfile();
+            loadAgentData();
+        }
+
+        function showProfile() {
+            document.getElementById('login-section').classList.add('hidden');
+            document.getElementById('profile-content').classList.remove('hidden');
+        }
+
+        function logout() {
+            currentUser = null;
+            document.getElementById('profile-content').classList.add('hidden');
+            document.getElementById('login-section').classList.remove('hidden');
+            document.getElementById('api-key').value = '';
+        }
+
+        async function loadProfileData() {
+            if (!currentUser) return;
+
+            try {
+                // Load profile info
+                const profileInfo = document.getElementById('profile-info');
+                profileInfo.innerHTML = createProfileInfo();
+
+                // Load statistics
+                const statsGrid = document.getElementById('stats-grid');
+                statsGrid.innerHTML = await createStatsGrid();
+
+                // Load activity (mock for now)
+                const activityList = document.getElementById('activity-list');
+                activityList.innerHTML = createActivityList();
+
+            } catch (error) {
+                console.error('Error loading profile data:', error);
+            }
+        }
+
+        function createProfileInfo() {
+            const user = currentUser;
+            let html = `
+                <div class="info-row">
+                    <span class="info-label">Name</span>
+                    <span class="info-value">${user.name}</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">User Type</span>
+                    <span class="info-value">${user.type.charAt(0).toUpperCase() + user.type.slice(1)}</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">User ID</span>
+                    <span class="info-value">#${user.id}</span>
+                </div>
+            `;
+
+            if (user.stellar_address) {
+                html += `
+                    <div class="info-row">
+                        <span class="info-label">Stellar Address</span>
+                        <span class="info-value">${user.stellar_address.substring(0, 8)}...</span>
+                    </div>
+                `;
+            }
+
+            if (user.balance !== undefined) {
+                html += `
+                    <div class="info-row">
+                        <span class="info-label">Balance</span>
+                        <span class="info-value balance-highlight">$${user.balance.toFixed(6)}</span>
+                    </div>
+                `;
+            }
+
+            if (user.reputation_level) {
+                html += `
+                    <div class="info-row">
+                        <span class="info-label">Reputation</span>
+                        <span class="reputation-badge">${user.reputation_level}</span>
+                    </div>
+                `;
+            }
+
+            return html;
+        }
+
+        async function createStatsGrid() {
+            const user = currentUser;
+            let html = '';
+
+            if (user.type === 'reviewer') {
+                html = `
+                    <div class="stat-item">
+                        <div class="stat-value">${user.stats.total_reviews || 0}</div>
+                        <div class="stat-label">Total Reviews</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value">${(user.stats.consensus_rate * 100 || 0).toFixed(1)}%</div>
+                        <div class="stat-label">Consensus Rate</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value">${user.stats.accuracy_score || 0}/10</div>
+                        <div class="stat-label">Accuracy Score</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value">$${user.stats.total_earned || 0}</div>
+                        <div class="stat-label">Total Earned</div>
+                    </div>
+                `;
+            } else if (user.type === 'supplier') {
+                html = `
+                    <div class="stat-item">
+                        <div class="stat-value">${user.package_count || 0}</div>
+                        <div class="stat-label">Data Packages</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value">$${user.balance || 0}</div>
+                        <div class="stat-label">Current Balance</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value">Active</div>
+                        <div class="stat-label">Status</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value">${new Date(user.created_at).toLocaleDateString()}</div>
+                        <div class="stat-label">Member Since</div>
+                    </div>
+                `;
+            }
+
+            return html;
+        }
+
+        function createActivityList() {
+            // Mock activity data for demo
+            const activities = [
+                {
+                    title: 'Data Query Completed',
+                    meta: '2 hours ago • Crypto Price Feed',
+                    amount: '+$0.0035'
+                },
+                {
+                    title: 'Review Submitted',
+                    meta: '5 hours ago • Package Quality Assessment',
+                    amount: '+$0.06'
+                },
+                {
+                    title: 'Consensus Bonus Earned',
+                    meta: '1 day ago • Financial Data Package',
+                    amount: '+$0.012'
+                }
+            ];
+
+            return activities.map(activity => `
+                <div class="activity-item">
+                    <div class="activity-info">
+                        <div class="activity-title">${activity.title}</div>
+                        <div class="activity-meta">${activity.meta}</div>
+                    </div>
+                    <div class="activity-amount">${activity.amount}</div>
+                </div>
+            `).join('');
+        }
+
+        async function loadAgentData() {
+            // Simplified agent profile
+            currentUser.balance = 0.50; // Mock balance
+            loadProfileData();
+        }
+
+        function refreshProfile() {
+            if (currentUser) {
+                loadProfileData();
+            }
+        }
+
+        function showRegisterInfo() {
+            alert(`To register as a new user:\n\n` +
+                  `Reviewers: POST /reviewers/register\n` +
+                  `Suppliers: POST /suppliers/register\n` +
+                  `Agents: Use POST /mint to get tokens\n\n` +
+                  `Check the API documentation for details.`);
+        }
+
+        // Theme management
+        function toggleTheme() {
+            const currentTheme = document.documentElement.getAttribute('data-theme');
+            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            const themeIcon = document.getElementById('theme-icon');
+            
+            document.documentElement.setAttribute('data-theme', newTheme);
+            themeIcon.textContent = newTheme === 'dark' ? '☀' : '☾';
+            
+            localStorage.setItem('theme', newTheme);
+        }
+
+        function initializeTheme() {
+            const savedTheme = localStorage.getItem('theme') || 'light';
+            const themeIcon = document.getElementById('theme-icon');
+            
+            document.documentElement.setAttribute('data-theme', savedTheme);
+            themeIcon.textContent = savedTheme === 'dark' ? '☀' : '☾';
+        }
+
+        // Initialize
+        initializeTheme();
+        selectUserType('reviewer');
+    </script>
+</body>
+</html>

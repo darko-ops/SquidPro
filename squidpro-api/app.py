@@ -121,7 +121,20 @@ class DataPackage(BaseModel):
     tags: List[str] = []
 
 
+@api.get("/")
+async def serve_catalog():
+    """Serve the data catalog as the main page"""
+    return FileResponse("public/catalog.html")
 
+@api.get("/profile.html")
+async def serve_profile():
+    """Serve the profile page"""
+    return FileResponse("public/profile.html")
+
+@api.get("/catalog.html") 
+async def serve_catalog_alt():
+    """Alternative catalog route"""
+    return FileResponse("public/catalog.html")
 
 @api.get("/")
 async def serve_catalog():
