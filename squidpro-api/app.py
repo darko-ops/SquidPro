@@ -4,10 +4,10 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 from contextlib import asynccontextmanager
-from fastapi.staticfiles import StaticFiles
 import asyncio
 import logging
 import secrets
+from fastapi.middleware.cors import CORSMiddleware
 import statistics
 from stellar_sdk import Keypair, Network, Server, TransactionBuilder, Asset
 from stellar_sdk.exceptions import SdkError
@@ -71,7 +71,14 @@ async def lifespan(app: FastAPI):
 
 api = FastAPI(title="SquidPro", version="0.1.0", lifespan=lifespan)
 
-api.mount("/", StaticFiles(directory="public", html=True), name="static")
+# Add CORS middleware
+api.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Pydantic Models
 class MintReq(BaseModel):
