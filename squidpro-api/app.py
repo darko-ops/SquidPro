@@ -12,6 +12,9 @@ import statistics
 from stellar_sdk import Keypair, Network, Server, TransactionBuilder, Asset
 from stellar_sdk.exceptions import SdkError
 from decimal import Decimal
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+import os
 
 logging.basicConfig(level=logging.INFO)
 
@@ -79,7 +82,8 @@ api.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
+if os.path.exists("public"):
+    api.mount("/static", StaticFiles(directory="public"), name="static")
 # Pydantic Models
 class MintReq(BaseModel):
     agent_id: str
@@ -116,6 +120,26 @@ class DataPackage(BaseModel):
     rate_limit: int = 1000
     tags: List[str] = []
 
+
+
+
+@api.get("/")
+async def serve_catalog():
+    """Serve the data catalog as the main page"""
+    catalog_path = "public/catalog.html"
+    if os.path.exists(catalog_path):
+        return FileResponse(catalog_path)
+    else:
+        return {"message": "SquidPro API is running", "catalog": "catalog.html not found"}
+
+@api.get("/catalog")
+async def serve_catalog_alt():
+    """Alternative route to serve the catalog"""
+    catalog_path = "public/catalog.html"
+    if os.path.exists(catalog_path):
+        return FileResponse(catalog_path)
+    else:
+        return {"error": "catalog.html not found in public directory"}
 # Reviewer System Endpoints
 
 @api.post("/reviewers/register")
