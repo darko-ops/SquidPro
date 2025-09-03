@@ -1100,3 +1100,376 @@ async def stellar_info():
         "network": STELLAR_NETWORK,
         "payment_asset": "XLM (native)"
     }
+
+
+# Add these enhanced endpoints to your squidpro-api/app.py
+
+@api.get("/users/me/detailed")
+async def get_detailed_profile(x_api_key: Optional[str] = Header(None)):
+    """Get comprehensive user profile with all ecosystem data"""
+    if not x_api_key:
+        raise HTTPException(status_code=401, detail="API key required")
+    
+    async with db_pool.acquire() as conn:
+        # Try reviewer first
+        if x_api_key.startswith('rev_'):
+            reviewer = await conn.fetchrow("""
+                SELECT r.*, rs.*, b.balance_usd
+                FROM reviewers r
+                LEFT JOIN reviewer_stats rs ON r.id = rs.reviewer_id
+                LEFT JOIN balances b ON r.id::text = b.user_id AND b.user_type = 'reviewer'
+                WHERE r.api_key = $1
+            """, x_api_key)
+            
+            if not reviewer:
+                raise HTTPException(status_code=401, detail="Invalid API key")
+            
+            # Get review history
+            review_history = await conn.fetch("""
+                SELECT rt.id as task_id, rt.task_type, rt.reward_pool_usd,
+                       rs.overall_rating, rs.payout_earned, rs.is_consensus,
+                       rs.submitted_at, dp.name as package_name, s.name as supplier_name
+                FROM review_submissions rs
+                JOIN review_tasks rt ON rs.task_id = rt.id
+                JOIN data_packages dp ON rt.package_id = dp.id
+                JOIN suppliers s ON dp.supplier_id = s.id
+                WHERE rs.reviewer_id = $1
+                ORDER BY rs.submitted_at DESC
+                LIMIT 50
+            """, reviewer["id"])
+            
+            # Get earnings by month
+            monthly_earnings = await conn.fetch("""
+                SELECT DATE_TRUNC('month', rs.submitted_at) as month,
+                       SUM(rs.payout_earned) as earnings,
+                       COUNT(*) as reviews
+                FROM review_submissions rs
+                WHERE rs.reviewer_id = $1 AND rs.payout_earned > 0
+                GROUP BY month
+                ORDER BY month DESC
+                LIMIT 12
+            """, reviewer["id"])
+            
+            # Get available tasks
+            available_tasks = await conn.fetch("""
+                SELECT rt.id, rt.task_type, rt.reward_pool_usd, rt.required_reviews,
+                       dp.name as package_name, dp.category,
+                       (rt.required_reviews - COALESCE(submitted_count.count, 0)) as spots_remaining
+                FROM review_tasks rt
+                JOIN data_packages dp ON rt.package_id = dp.id
+                LEFT JOIN (
+                    SELECT task_id, COUNT(*) as count 
+                    FROM review_submissions 
+                    GROUP BY task_id
+                ) submitted_count ON rt.id = submitted_count.task_id
+                WHERE rt.status = 'open' 
+                AND rt.expires_at > NOW()
+                AND rt.id NOT IN (
+                    SELECT task_id FROM review_submissions WHERE reviewer_id = $1
+                )
+                AND (rt.required_reviews - COALESCE(submitted_count.count, 0)) > 0
+                ORDER BY rt.reward_pool_usd DESC
+                LIMIT 20
+            """, reviewer["id"])
+            
+            return {
+                "user": {
+                    "id": reviewer["id"],
+                    "name": reviewer["name"],
+                    "email": reviewer.get("email"),
+                    "type": "reviewer",
+                    "stellar_address": reviewer["stellar_address"],
+                    "roles": ["buyer", "reviewer"],
+                    "reputation_level": reviewer["reputation_level"] or "novice",
+                    "created_at": reviewer["created_at"].isoformat() if reviewer.get("created_at") else None
+                },
+                "balance": {
+                    "current": float(reviewer["balance_usd"] or 0),
+                    "lifetime_earned": float(reviewer["total_earned"] or 0),
+                    "payout_threshold": 5.0
+                },
+                "stats": {
+                    "total_reviews": reviewer["total_reviews"] or 0,
+                    "consensus_rate": float(reviewer["consensus_rate"] or 0),
+                    "accuracy_score": float(reviewer["accuracy_score"] or 0),
+                    "avg_review_time": reviewer["avg_review_time_minutes"] or 0
+                },
+                "review_history": [
+                    {
+                        "task_id": r["task_id"],
+                        "package_name": r["package_name"],
+                        "supplier": r["supplier_name"],
+                        "task_type": r["task_type"],
+                        "rating_given": r["overall_rating"],
+                        "earned": float(r["payout_earned"]) if r["payout_earned"] else 0,
+                        "consensus": r["is_consensus"],
+                        "date": r["submitted_at"].isoformat()
+                    } for r in review_history
+                ],
+                "monthly_earnings": [
+                    {
+                        "month": r["month"].strftime("%Y-%m"),
+                        "earnings": float(r["earnings"]),
+                        "reviews": r["reviews"]
+                    } for r in monthly_earnings
+                ],
+                "available_tasks": [
+                    {
+                        "id": t["id"],
+                        "package_name": t["package_name"],
+                        "category": t["category"],
+                        "task_type": t["task_type"],
+                        "reward": float(t["reward_pool_usd"]),
+                        "spots_remaining": t["spots_remaining"]
+                    } for t in available_tasks
+                ]
+            }
+            
+        # Try supplier
+        elif x_api_key.startswith('sup_'):
+            supplier = await conn.fetchrow("""
+                SELECT s.*, b.balance_usd
+                FROM suppliers s
+                LEFT JOIN balances b ON s.id::text = b.user_id AND b.user_type = 'supplier'
+                WHERE s.api_key = $1 AND s.status = 'active'
+            """, x_api_key)
+            
+            if not supplier:
+                raise HTTPException(status_code=401, detail="Invalid API key")
+                
+            # Get supplier packages with performance
+            packages = await conn.fetch("""
+                SELECT dp.*, 
+                       COUNT(qh.id) as total_queries,
+                       SUM(qh.cost * 0.7) as total_revenue,
+                       AVG(pqs.overall_rating) as avg_rating,
+                       pqs.total_reviews
+                FROM data_packages dp
+                LEFT JOIN query_history qh ON dp.id = qh.package_id
+                LEFT JOIN package_quality_scores pqs ON dp.id = pqs.package_id
+                WHERE dp.supplier_id = $1
+                GROUP BY dp.id, pqs.overall_rating, pqs.total_reviews
+                ORDER BY total_revenue DESC NULLS LAST
+            """, supplier["id"])
+            
+            # Get monthly revenue
+            monthly_revenue = await conn.fetch("""
+                SELECT DATE_TRUNC('month', qh.created_at) as month,
+                       SUM(qh.cost * 0.7) as revenue,
+                       COUNT(*) as queries
+                FROM query_history qh
+                JOIN data_packages dp ON qh.package_id = dp.id
+                WHERE dp.supplier_id = $1
+                GROUP BY month
+                ORDER BY month DESC
+                LIMIT 12
+            """, supplier["id"])
+            
+            # Get recent usage
+            recent_usage = await conn.fetch("""
+                SELECT qh.created_at, qh.agent_id, qh.cost, dp.name as package_name,
+                       qh.trace_id
+                FROM query_history qh
+                JOIN data_packages dp ON qh.package_id = dp.id
+                WHERE dp.supplier_id = $1
+                ORDER BY qh.created_at DESC
+                LIMIT 100
+            """, supplier["id"])
+            
+            return {
+                "user": {
+                    "id": supplier["id"],
+                    "name": supplier["name"],
+                    "email": supplier["email"],
+                    "type": "supplier",
+                    "stellar_address": supplier["stellar_address"],
+                    "roles": ["buyer", "supplier"],
+                    "status": supplier["status"],
+                    "created_at": supplier["created_at"].isoformat()
+                },
+                "balance": {
+                    "current": float(supplier["balance_usd"] or 0),
+                    "lifetime_earned": sum(float(r["total_revenue"] or 0) for r in packages),
+                    "payout_threshold": 25.0
+                },
+                "packages": [
+                    {
+                        "id": p["id"],
+                        "name": p["name"],
+                        "description": p["description"],
+                        "category": p["category"],
+                        "price": float(p["price_per_query"]),
+                        "total_queries": p["total_queries"] or 0,
+                        "total_revenue": float(p["total_revenue"] or 0),
+                        "avg_rating": float(p["avg_rating"] or 0),
+                        "total_reviews": p["total_reviews"] or 0,
+                        "status": p["status"],
+                        "created_at": p["created_at"].isoformat()
+                    } for p in packages
+                ],
+                "monthly_revenue": [
+                    {
+                        "month": r["month"].strftime("%Y-%m"),
+                        "revenue": float(r["revenue"]),
+                        "queries": r["queries"]
+                    } for r in monthly_revenue
+                ],
+                "recent_usage": [
+                    {
+                        "date": u["created_at"].isoformat(),
+                        "agent_id": u["agent_id"],
+                        "package_name": u["package_name"],
+                        "revenue": float(u["cost"]) * 0.7,
+                        "trace_id": u["trace_id"]
+                    } for u in recent_usage
+                ]
+            }
+        
+        raise HTTPException(status_code=401, detail="Invalid API key")
+
+@api.get("/users/me/payout-history")
+async def get_payout_history(x_api_key: Optional[str] = Header(None)):
+    """Get user's payout history"""
+    if not x_api_key:
+        raise HTTPException(status_code=401, detail="API key required")
+    
+    async with db_pool.acquire() as conn:
+        user_id = None
+        user_type = None
+        
+        if x_api_key.startswith('rev_'):
+            reviewer = await conn.fetchval("SELECT id FROM reviewers WHERE api_key = $1", x_api_key)
+            if reviewer:
+                user_id = str(reviewer)
+                user_type = 'reviewer'
+        elif x_api_key.startswith('sup_'):
+            supplier = await conn.fetchval("SELECT id FROM suppliers WHERE api_key = $1", x_api_key)
+            if supplier:
+                user_id = str(supplier)
+                user_type = 'supplier'
+        
+        if not user_id:
+            raise HTTPException(status_code=401, detail="Invalid API key")
+            
+        payouts = await conn.fetch("""
+            SELECT stellar_tx_hash, amount_usd, created_at
+            FROM payout_history
+            WHERE user_type = $1 AND user_id = $2
+            ORDER BY created_at DESC
+            LIMIT 50
+        """, user_type, user_id)
+        
+        return [
+            {
+                "tx_hash": p["stellar_tx_hash"],
+                "amount": float(p["amount_usd"]),
+                "date": p["created_at"].isoformat()
+            } for p in payouts
+        ]
+
+@api.post("/users/me/update-payout-threshold")
+async def update_payout_threshold(
+    request: dict,
+    x_api_key: Optional[str] = Header(None)
+):
+    """Update user's payout threshold"""
+    if not x_api_key:
+        raise HTTPException(status_code=401, detail="API key required")
+    
+    threshold = request.get("threshold")
+    if not threshold or threshold < 0.01:
+        raise HTTPException(status_code=400, detail="Invalid threshold")
+    
+    async with db_pool.acquire() as conn:
+        user_id = None
+        user_type = None
+        
+        if x_api_key.startswith('rev_'):
+            reviewer = await conn.fetchval("SELECT id FROM reviewers WHERE api_key = $1", x_api_key)
+            if reviewer:
+                user_id = str(reviewer)
+                user_type = 'reviewer'
+        elif x_api_key.startswith('sup_'):
+            supplier = await conn.fetchval("SELECT id FROM suppliers WHERE api_key = $1", x_api_key)
+            if supplier:
+                user_id = str(supplier)
+                user_type = 'supplier'
+        
+        if not user_id:
+            raise HTTPException(status_code=401, detail="Invalid API key")
+        
+        await conn.execute("""
+            UPDATE balances 
+            SET payout_threshold_usd = $1
+            WHERE user_type = $2 AND user_id = $3
+        """, threshold, user_type, user_id)
+        
+        return {"success": True, "new_threshold": threshold}
+
+@api.get("/users/me/api-usage")
+async def get_api_usage_stats(x_api_key: Optional[str] = Header(None)):
+    """Get API usage statistics"""
+    if not x_api_key:
+        raise HTTPException(status_code=401, detail="API key required")
+    
+@api.get("/users/me")
+async def get_unified_profile(x_api_key: Optional[str] = Header(None)):
+    """Get unified user profile - works with current separate tables"""
+    if not x_api_key:
+        raise HTTPException(status_code=401, detail="API key required")
+    
+    async with db_pool.acquire() as conn:
+        # Try reviewer first
+        if x_api_key.startswith('rev_'):
+            reviewer = await conn.fetchrow("""
+                SELECT r.*, rs.*, b.balance_usd
+                FROM reviewers r
+                LEFT JOIN reviewer_stats rs ON r.id = rs.reviewer_id
+                LEFT JOIN balances b ON r.id::text = b.user_id AND b.user_type = 'reviewer'
+                WHERE r.api_key = $1
+            """, x_api_key)
+            
+            if reviewer:
+                return {
+                    "id": reviewer["id"],
+                    "name": reviewer["name"],
+                    "email": reviewer.get("email"),
+                    "type": "reviewer",
+                    "stellar_address": reviewer["stellar_address"],
+                    "roles": ["buyer", "reviewer"],
+                    "balance": float(reviewer["balance_usd"] or 0),
+                    "stats": {
+                        "total_reviews": reviewer["total_reviews"] or 0,
+                        "consensus_rate": float(reviewer["consensus_rate"] or 0),
+                        "accuracy_score": float(reviewer["accuracy_score"] or 0),
+                        "total_earned": float(reviewer["total_earned"] or 0)
+                    },
+                    "reputation_level": reviewer["reputation_level"] or "novice"
+                }
+        
+        # Try supplier
+        elif x_api_key.startswith('sup_'):
+            supplier = await conn.fetchrow("""
+                SELECT s.*, b.balance_usd,
+                       COUNT(dp.id) as package_count
+                FROM suppliers s
+                LEFT JOIN balances b ON s.id::text = b.user_id AND b.user_type = 'supplier'
+                LEFT JOIN data_packages dp ON s.id = dp.supplier_id
+                WHERE s.api_key = $1 AND s.status = 'active'
+                GROUP BY s.id, b.balance_usd
+            """, x_api_key)
+            
+            if supplier:
+                return {
+                    "id": supplier["id"],
+                    "name": supplier["name"],
+                    "email": supplier["email"],
+                    "type": "supplier", 
+                    "stellar_address": supplier["stellar_address"],
+                    "roles": ["buyer", "supplier"],
+                    "balance": float(supplier["balance_usd"] or 0),
+                    "package_count": supplier["package_count"] or 0,
+                    "status": supplier["status"]
+                }
+        
+        raise HTTPException(status_code=401, detail="Invalid API key")

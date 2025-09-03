@@ -3,12 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Profile - SquidPro</title>
+    <title>Profile Dashboard - SquidPro</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
     <style>
-
         :root {
             --bg-primary: #ffffff;
             --bg-secondary: #fafafa;
@@ -22,6 +22,7 @@
             --accent-hover: #00acc1;
             --success: #00c851;
             --warning: #ff9f43;
+            --danger: #ff3547;
         }
 
         [data-theme="dark"] {
@@ -37,6 +38,7 @@
             --accent-hover: #00e5ff;
             --success: #00c851;
             --warning: #ff9f43;
+            --danger: #ff3547;
         }
 
         * {
@@ -49,14 +51,14 @@
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
             background: var(--bg-primary);
             color: var(--text-primary);
-            font-weight: 300;
+            font-weight: 400;
             line-height: 1.5;
             min-height: 100vh;
             transition: background-color 0.3s ease, color 0.3s ease;
         }
 
         .container {
-            max-width: 1200px;
+            max-width: 1400px;
             margin: 0 auto;
             padding: 0 2rem;
         }
@@ -64,8 +66,12 @@
         /* Header */
         .header {
             border-bottom: 1px solid var(--border-primary);
-            padding: 2rem 0;
-            transition: border-color 0.3s ease;
+            padding: 1.5rem 0;
+            position: sticky;
+            top: 0;
+            background: var(--bg-primary);
+            z-index: 100;
+            transition: all 0.3s ease;
         }
 
         .header-content {
@@ -99,20 +105,25 @@
         .nav-link:hover, .nav-link.active {
             color: var(--accent);
         }
-        .nav-link:hover, .nav-link.active {
-            color: var(--accent);
-        }
-
-        @media (max-width: 768px) {
-    .nav-links {
-        display: none;
-    }
-}
 
         .header-right {
             display: flex;
             align-items: center;
-            gap: 1.5rem;
+            gap: 1rem;
+        }
+
+        .user-menu {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem;
+            border: 1px solid var(--border-primary);
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .user-menu:hover {
+            border-color: var(--accent);
         }
 
         .theme-toggle {
@@ -124,9 +135,6 @@
             font-size: 0.875rem;
             transition: all 0.3s ease;
             min-width: 2.5rem;
-            display: flex;
-            align-items: center;
-            justify-content: center;
         }
 
         .theme-toggle:hover {
@@ -134,266 +142,312 @@
             color: var(--accent);
         }
 
-        /* Main Content */
+        /* Main Layout */
         .main {
-            padding: 3rem 0;
+            padding: 2rem 0;
         }
 
-        .profile-header {
-            text-align: center;
-            margin-bottom: 3rem;
-        }
-
-        .profile-title {
-            font-size: 2.5rem;
-            font-weight: 600;
-            margin-bottom: 0.5rem;
-            letter-spacing: -0.03em;
-            color: var(--text-primary);
-        }
-
-        .profile-subtitle {
-            color: var(--text-secondary);
-            font-size: 1rem;
-            font-weight: 400;
-        }
-
-        /* Login Section */
-        .login-section {
-            max-width: 400px;
-            margin: 0 auto;
-            padding: 2rem;
-            border: 1px solid var(--border-primary);
-            background: var(--bg-secondary);
-            transition: all 0.3s ease;
-        }
-
-        .login-title {
-            font-size: 1.25rem;
-            font-weight: 600;
-            margin-bottom: 1rem;
-            color: var(--text-primary);
-            text-align: center;
-        }
-
-        .user-type-selector {
+        .dashboard-grid {
             display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 0.5rem;
-            margin-bottom: 1.5rem;
-        }
-
-        .user-type-btn {
-            padding: 0.75rem;
-            border: 1px solid var(--border-secondary);
-            background: transparent;
-            color: var(--text-secondary);
-            cursor: pointer;
-            font-size: 0.875rem;
-            transition: all 0.3s ease;
-        }
-
-        .user-type-btn.active {
-            background: var(--text-primary);
-            color: var(--bg-primary);
-            border-color: var(--text-primary);
-        }
-
-        .form-group {
-            margin-bottom: 1rem;
-        }
-
-        .form-group label {
-            display: block;
-            font-size: 0.875rem;
-            font-weight: 500;
-            margin-bottom: 0.5rem;
-            color: var(--text-primary);
-        }
-
-        .form-input {
-            width: 100%;
-            padding: 0.75rem 0;
-            border: none;
-            border-bottom: 1px solid var(--border-secondary);
-            background: transparent;
-            font-size: 1rem;
-            font-family: inherit;
-            font-weight: 300;
-            color: var(--text-primary);
-            transition: border-color 0.2s ease;
-        }
-
-        .form-input:focus {
-            outline: none;
-            border-bottom-color: var(--accent);
-        }
-
-        .form-input::placeholder {
-            color: var(--text-tertiary);
-        }
-
-        .login-btn {
-            width: 100%;
-            padding: 1rem;
-            background: var(--text-primary);
-            color: var(--bg-primary);
-            border: none;
-            font-size: 0.875rem;
-            font-weight: 500;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            margin-top: 1rem;
-        }
-
-        .login-btn:hover {
-            background: var(--text-secondary);
-        }
-
-        /* Profile Content */
-        .profile-content {
-            display: grid;
-            grid-template-columns: 1fr 2fr;
-            gap: 3rem;
-        }
-
-        .profile-sidebar {
-            display: flex;
-            flex-direction: column;
+            grid-template-columns: 300px 1fr;
             gap: 2rem;
         }
 
-        .profile-card, .stats-card, .activity-card {
-            border: 1px solid var(--border-primary);
-            padding: 2rem;
-            background: var(--bg-primary);
-            transition: all 0.3s ease;
-        }
-
-        .card-title {
-            font-size: 1.25rem;
-            font-weight: 600;
-            margin-bottom: 1.5rem;
-            color: var(--text-primary);
-        }
-
-        .profile-info {
+        /* Sidebar */
+        .sidebar {
             display: flex;
             flex-direction: column;
             gap: 1rem;
         }
 
-        .info-row {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
+        .sidebar-section {
+            border: 1px solid var(--border-primary);
+            padding: 1.5rem;
+            background: var(--bg-primary);
+            transition: all 0.3s ease;
         }
 
-        .info-label {
+        .sidebar-title {
+            font-size: 1rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            color: var(--text-primary);
+        }
+
+        .user-info {
+            text-align: center;
+            margin-bottom: 1rem;
+        }
+
+        .user-avatar {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--accent), var(--accent-hover));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 1rem;
+            font-size: 2rem;
+            font-weight: 700;
+            color: white;
+        }
+
+        .user-name {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin-bottom: 0.25rem;
+            color: var(--text-primary);
+        }
+
+        .user-type {
             font-size: 0.875rem;
             color: var(--text-secondary);
-            font-weight: 500;
-        }
-
-        .info-value {
-            font-size: 0.875rem;
-            color: var(--text-primary);
-            font-weight: 600;
-        }
-
-        .balance-highlight {
-            font-size: 1.5rem;
-            color: var(--success);
-            font-weight: 700;
-        }
-
-        .reputation-badge {
-            padding: 0.25rem 0.5rem;
-            font-size: 0.75rem;
-            border: 1px solid var(--accent);
-            color: var(--accent);
-            font-weight: 500;
             text-transform: capitalize;
         }
 
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 1.5rem;
+        .balance-display {
+            text-align: center;
+            padding: 1rem;
+            border: 1px solid var(--border-primary);
+            background: var(--bg-secondary);
+            margin: 1rem 0;
         }
 
-        .stat-item {
+        .balance-label {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 0.25rem;
+        }
+
+        .balance-amount {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--success);
+        }
+
+        .roles-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .role-badge {
+            padding: 0.5rem;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-secondary);
+            font-size: 0.875rem;
+            text-transform: capitalize;
             text-align: center;
         }
 
+        .role-badge.active {
+            background: var(--accent);
+            color: white;
+            border-color: var(--accent);
+        }
+
+        /* Main Content */
+        .content {
+            display: flex;
+            flex-direction: column;
+            gap: 2rem;
+        }
+
+        .section-tabs {
+            display: flex;
+            gap: 0.5rem;
+            border-bottom: 1px solid var(--border-primary);
+            padding-bottom: 0;
+            margin-bottom: 2rem;
+        }
+
+        .tab-button {
+            padding: 1rem 1.5rem;
+            border: none;
+            background: transparent;
+            color: var(--text-secondary);
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            font-size: 0.875rem;
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
+
+        .tab-button.active {
+            color: var(--accent);
+            border-bottom-color: var(--accent);
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        /* Cards */
+        .card {
+            border: 1px solid var(--border-primary);
+            background: var(--bg-primary);
+            transition: all 0.3s ease;
+        }
+
+        .card-header {
+            padding: 1.5rem;
+            border-bottom: 1px solid var(--border-primary);
+            display: flex;
+            justify-content: between;
+            align-items: center;
+        }
+
+        .card-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .card-content {
+            padding: 1.5rem;
+        }
+
+        /* Stats Grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .stat-card {
+            padding: 1.5rem;
+            border: 1px solid var(--border-primary);
+            text-align: center;
+            transition: all 0.3s ease;
+        }
+
+        .stat-card:hover {
+            border-color: var(--accent);
+        }
+
         .stat-value {
-            font-size: 1.5rem;
+            font-size: 2rem;
             font-weight: 700;
             color: var(--text-primary);
             margin-bottom: 0.25rem;
         }
 
         .stat-label {
-            font-size: 0.75rem;
-            color: var(--text-secondary);
-            font-weight: 500;
-        }
-
-        .activity-list {
-            display: flex;
-            flex-direction: column;
-            gap: 1rem;
-        }
-
-        .activity-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 1rem;
-            border: 1px solid var(--border-primary);
-            background: var(--bg-secondary);
-            transition: all 0.3s ease;
-        }
-
-        .activity-item:hover {
-            border-color: var(--accent);
-        }
-
-        .activity-info {
-            flex: 1;
-        }
-
-        .activity-title {
             font-size: 0.875rem;
-            font-weight: 600;
-            color: var(--text-primary);
-            margin-bottom: 0.25rem;
-        }
-
-        .activity-meta {
-            font-size: 0.75rem;
             color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
         }
 
-        .activity-amount {
-            font-size: 0.875rem;
-            font-weight: 600;
+        .stat-change {
+            font-size: 0.75rem;
+            margin-top: 0.25rem;
+        }
+
+        .stat-change.positive {
             color: var(--success);
         }
 
-        .error-message, .loading-message {
-            text-align: center;
-            padding: 2rem;
+        .stat-change.negative {
+            color: var(--danger);
+        }
+
+        /* Tables */
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1rem;
+        }
+
+        .data-table th,
+        .data-table td {
+            padding: 1rem;
+            text-align: left;
+            border-bottom: 1px solid var(--border-primary);
+        }
+
+        .data-table th {
+            font-weight: 600;
+            color: var(--text-primary);
+            background: var(--bg-secondary);
+            font-size: 0.875rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .data-table td {
             color: var(--text-secondary);
-            font-style: italic;
+            font-size: 0.875rem;
         }
 
-        .action-buttons {
-            display: flex;
+        .data-table tr:hover {
+            background: var(--bg-secondary);
+        }
+
+        /* Charts */
+        .chart-container {
+            position: relative;
+            height: 300px;
+            margin: 1rem 0;
+        }
+
+        /* Package Cards */
+        .package-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
             gap: 1rem;
-            margin-top: 2rem;
+            margin-top: 1rem;
         }
 
+        .package-card {
+            border: 1px solid var(--border-primary);
+            padding: 1.5rem;
+            transition: all 0.3s ease;
+        }
+
+        .package-card:hover {
+            border-color: var(--accent);
+            transform: translateY(-2px);
+        }
+
+        .package-name {
+            font-size: 1.125rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 0.5rem;
+        }
+
+        .package-meta {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 1rem;
+            margin-top: 1rem;
+            font-size: 0.875rem;
+        }
+
+        .meta-item {
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .meta-label {
+            color: var(--text-secondary);
+        }
+
+        .meta-value {
+            color: var(--text-primary);
+            font-weight: 600;
+        }
+
+        /* Buttons */
         .btn {
             padding: 0.75rem 1.5rem;
             border: 1px solid var(--text-primary);
@@ -404,6 +458,7 @@
             cursor: pointer;
             transition: all 0.3s ease;
             text-decoration: none;
+            display: inline-block;
         }
 
         .btn-primary {
@@ -411,154 +466,334 @@
             color: var(--bg-primary);
         }
 
-        .btn:hover {
+        .btn-accent {
+            background: var(--accent);
+            color: white;
             border-color: var(--accent);
-            color: var(--accent);
+        }
+
+        .btn:hover {
+            transform: translateY(-1px);
         }
 
         .btn-primary:hover {
             background: var(--text-secondary);
-            color: var(--bg-primary);
         }
 
-        /* Responsive Design */
+        .btn-accent:hover {
+            background: var(--accent-hover);
+        }
+
+        /* Settings */
+        .settings-form {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            max-width: 400px;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .form-label {
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .form-input {
+            padding: 0.75rem;
+            border: 1px solid var(--border-secondary);
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            font-size: 0.875rem;
+            transition: all 0.3s ease;
+        }
+
+        .form-input:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+
+        /* Loading States */
+        .loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 3rem;
+            color: var(--text-secondary);
+        }
+
+        .spinner {
+            width: 20px;
+            height: 20px;
+            border: 2px solid var(--border-primary);
+            border-top: 2px solid var(--accent);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-right: 0.5rem;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Responsive */
+        @media (max-width: 1024px) {
+            .dashboard-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .sidebar {
+                order: 2;
+            }
+            
+            .content {
+                order: 1;
+            }
+        }
+
         @media (max-width: 768px) {
             .container {
                 padding: 0 1rem;
             }
-
-            .profile-content {
-                grid-template-columns: 1fr;
-                gap: 2rem;
+            
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
             }
-
+            
+            .package-grid {
+                grid-template-columns: 1fr;
+            }
+            
             .nav-links {
                 display: none;
-            }
-
-            .user-type-selector {
-                grid-template-columns: 1fr;
-            }
-
-            .stats-grid {
-                grid-template-columns: 1fr;
-            }
-
-            .activity-item {
-                flex-direction: column;
-                align-items: flex-start;
-                gap: 0.5rem;
-            }
-
-            .action-buttons {
-                flex-direction: column;
             }
         }
 
         .hidden {
-            display: none;
+            display: none !important;
         }
     </style>
 </head>
-<header class="header">
-    <div class="container">
-        <div class="header-content">
-            <a href="/" class="logo">SquidPro</a>
-            <div class="nav-links">
-                <a href="/" class="nav-link active">Catalog</a>
-                <a href="/profile.html" class="nav-link">Profile</a>
-            </div>
-            <div class="header-right">
-                <button class="theme-toggle" onclick="toggleTheme()" title="Toggle dark mode">
-                    <span id="theme-icon">☾</span>
-                </button>
-                <div class="api-status">
-                    <div class="status-dot"></div>
-                    <span id="api-status-text">Connected</span>
+<body>
+    <header class="header">
+        <div class="container">
+            <div class="header-content">
+                <a href="/" class="logo">SquidPro</a>
+                <div class="nav-links">
+                    <a href="/" class="nav-link">Catalog</a>
+                    <a href="/profile.html" class="nav-link active">Profile</a>
+                </div>
+                <div class="header-right">
+                    <button class="theme-toggle" onclick="toggleTheme()" title="Toggle dark mode">
+                        <span id="theme-icon">☾</span>
+                    </button>
+                    <div class="user-menu" onclick="logout()">
+                        <span>Sign Out</span>
+                    </div>
                 </div>
             </div>
         </div>
+    </header>
+
+    <!-- Login Form (hidden when authenticated) -->
+    <div id="login-container" class="container" style="margin-top: 4rem;">
+        <div style="max-width: 400px; margin: 0 auto; padding: 2rem; border: 1px solid var(--border-primary); background: var(--bg-secondary);">
+            <h2 style="text-align: center; margin-bottom: 1.5rem;">Access Your Dashboard</h2>
+            
+            <div class="form-group">
+                <label>User Type</label>
+                <select id="user-type" class="form-input">
+                    <option value="reviewer">Reviewer</option>
+                    <option value="supplier">Supplier</option>
+                    <option value="agent">Agent</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label for="api-key">API Key</label>
+                <input type="password" id="api-key" class="form-input" placeholder="Enter your API key...">
+            </div>
+            
+            <button onclick="login()" class="btn btn-primary" style="width: 100%; margin-top: 1rem;">
+                Access Dashboard
+            </button>
+        </div>
     </div>
-</header>
-    <main class="main">
+
+    <!-- Main Dashboard (hidden until login) -->
+    <main id="main-dashboard" class="main hidden">
         <div class="container">
-            <div class="profile-header">
-                <h1 class="profile-title">Your Profile</h1>
-                <p class="profile-subtitle">Manage your account and view your activity</p>
-            </div>
-
-            <!-- Login Section (shown when not authenticated) -->
-            <div id="login-section" class="login-section">
-                <h2 class="login-title">Access Your Profile</h2>
-                
-                <div class="user-type-selector">
-                    <button class="user-type-btn active" onclick="selectUserType('reviewer')" id="reviewer-btn">
-                        Reviewer
-                    </button>
-                    <button class="user-type-btn" onclick="selectUserType('supplier')" id="supplier-btn">
-                        Supplier
-                    </button>
-                    <button class="user-type-btn" onclick="selectUserType('agent')" id="agent-btn">
-                        Agent
-                    </button>
-                </div>
-
-                <form onsubmit="login(event)">
-                    <div class="form-group">
-                        <label for="api-key">API Key</label>
-                        <input 
-                            type="password" 
-                            id="api-key" 
-                            class="form-input" 
-                            placeholder="Enter your API key..."
-                            required
-                        >
-                    </div>
-                    
-                    <button type="submit" class="login-btn">
-                        Access Profile
-                    </button>
-                </form>
-
-                <div class="action-buttons">
-                    <a href="/" class="btn">← Back to Catalog</a>
-                    <button class="btn btn-primary" onclick="showRegisterInfo()">
-                        New User?
-                    </button>
-                </div>
-            </div>
-
-            <!-- Profile Content (shown when authenticated) -->
-            <div id="profile-content" class="profile-content hidden">
-                <div class="profile-sidebar">
-                    <div class="profile-card">
-                        <h2 class="card-title">Account Information</h2>
-                        <div class="profile-info" id="profile-info">
-                            <div class="loading-message">Loading profile...</div>
+            <div class="dashboard-grid">
+                <!-- Sidebar -->
+                <div class="sidebar">
+                    <!-- User Profile Card -->
+                    <div class="sidebar-section">
+                        <div class="user-info">
+                            <div class="user-avatar" id="user-avatar">A</div>
+                            <div class="user-name" id="user-name">Loading...</div>
+                            <div class="user-type" id="user-type-display">User</div>
+                        </div>
+                        
+                        <div class="balance-display">
+                            <div class="balance-label">Current Balance</div>
+                            <div class="balance-amount" id="current-balance">$0.00</div>
+                        </div>
+                        
+                        <div class="roles-list" id="user-roles">
+                            <!-- Roles populated by JavaScript -->
                         </div>
                     </div>
 
-                    <div class="stats-card">
-                        <h2 class="card-title">Statistics</h2>
-                        <div class="stats-grid" id="stats-grid">
-                            <div class="loading-message">Loading stats...</div>
+                    <!-- Quick Stats -->
+                    <div class="sidebar-section">
+                        <div class="sidebar-title">Quick Stats</div>
+                        <div id="quick-stats">
+                            <!-- Stats populated by JavaScript -->
                         </div>
+                    </div>
+
+                    <!-- Wallet Info -->
+                    <div class="sidebar-section">
+                        <div class="sidebar-title">Wallet</div>
+                        <div style="font-size: 0.875rem; color: var(--text-secondary); word-break: break-all;" id="stellar-address">
+                            Loading...
+                        </div>
+                        <button class="btn btn-accent" style="width: 100%; margin-top: 1rem;" onclick="requestPayout()">
+                            Request Payout
+                        </button>
                     </div>
                 </div>
 
-                <div class="activity-card">
-                    <h2 class="card-title">Recent Activity</h2>
-                    <div class="activity-list" id="activity-list">
-                        <div class="loading-message">Loading activity...</div>
+                <!-- Main Content -->
+                <div class="content">
+                    <!-- Section Tabs -->
+                    <div class="section-tabs">
+                        <button class="tab-button active" onclick="showTab('overview')">Overview</button>
+                        <button class="tab-button" onclick="showTab('listings')" id="listings-tab">Listings</button>
+                        <button class="tab-button" onclick="showTab('earnings')">Earnings</button>
+                        <button class="tab-button" onclick="showTab('activity')">Activity</button>
+                        <button class="tab-button" onclick="showTab('settings')">Settings</button>
                     </div>
-                    
-                    <div class="action-buttons">
-                        <button class="btn" onclick="logout()">
-                            Sign Out
-                        </button>
-                        <button class="btn btn-primary" onclick="refreshProfile()">
-                            Refresh Data
-                        </button>
+
+                    <!-- Overview Tab -->
+                    <div id="overview-tab" class="tab-content active">
+                        <div class="stats-grid" id="overview-stats">
+                            <!-- Stats populated by JavaScript -->
+                        </div>
+                        
+                        <div class="card">
+                            <div class="card-header">
+                                <h3 class="card-title">Performance Chart</h3>
+                            </div>
+                            <div class="card-content">
+                                <div class="chart-container">
+                                    <canvas id="performanceChart"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Listings Tab (Supplier) / Tasks Tab (Reviewer) -->
+                    <div id="listings-tab-content" class="tab-content">
+                        <!-- Content populated by JavaScript -->
+                    </div>
+
+                    <!-- Earnings Tab -->
+                    <div id="earnings-tab" class="tab-content">
+                        <div class="card">
+                            <div class="card-header">
+                                <h3 class="card-title">Earnings History</h3>
+                            </div>
+                            <div class="card-content">
+                                <div class="chart-container">
+                                    <canvas id="earningsChart"></canvas>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="card" style="margin-top: 2rem;">
+                            <div class="card-header">
+                                <h3 class="card-title">Payout History</h3>
+                            </div>
+                            <div class="card-content">
+                                <table class="data-table" id="payout-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Date</th>
+                                            <th>Amount</th>
+                                            <th>Transaction</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <!-- Populated by JavaScript -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Activity Tab -->
+                    <div id="activity-tab" class="tab-content">
+                        <div class="card">
+                            <div class="card-header">
+                                <h3 class="card-title">Recent Activity</h3>
+                            </div>
+                            <div class="card-content">
+                                <table class="data-table" id="activity-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Date</th>
+                                            <th>Type</th>
+                                            <th>Description</th>
+                                            <th>Amount</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <!-- Populated by JavaScript -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Settings Tab -->
+                    <div id="settings-tab" class="tab-content">
+                        <div class="card">
+                            <div class="card-header">
+                                <h3 class="card-title">Payout Settings</h3>
+                            </div>
+                            <div class="card-content">
+                                <div class="settings-form">
+                                    <div class="form-group">
+                                        <label class="form-label">Payout Threshold (USD)</label>
+                                        <input type="number" id="payout-threshold" class="form-input" step="0.01" min="0.01">
+                                        <small style="color: var(--text-secondary);">
+                                            Automatic payouts when balance reaches this amount
+                                        </small>
+                                    </div>
+                                    <button class="btn btn-primary" onclick="updatePayoutThreshold()">
+                                        Update Threshold
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="card" style="margin-top: 2rem;">
+                            <div class="card-header">
+                                <h3 class="card-title">API Usage</h3>
+                            </div>
+                            <div class="card-content">
+                                <div id="api-usage-stats">
+                                    <!-- API usage stats populated by JavaScript -->
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -568,258 +803,536 @@
     <script>
         const API_BASE = 'http://localhost:8100';
         let currentUser = null;
-        let userType = 'reviewer';
+        let userApiKey = null;
+        let performanceChart = null;
+        let earningsChart = null;
 
-        function selectUserType(type) {
-            userType = type;
-            
-            // Update button states
-            document.querySelectorAll('.user-type-btn').forEach(btn => {
-                btn.classList.remove('active');
-            });
-            document.getElementById(`${type}-btn`).classList.add('active');
-            
-            // Update placeholder text
-            const input = document.getElementById('api-key');
-            if (type === 'reviewer') {
-                input.placeholder = 'Enter your reviewer API key (rev_...)';
-            } else if (type === 'supplier') {
-                input.placeholder = 'Enter your supplier API key (sup_...)';
-            } else {
-                input.placeholder = 'Enter your agent token or API key...';
-            }
-        }
-
-        async function login(event) {
-            event.preventDefault();
+        // Authentication
+        async function login() {
             const apiKey = document.getElementById('api-key').value.trim();
+            const userType = document.getElementById('user-type').value;
             
             if (!apiKey) {
                 alert('Please enter your API key');
                 return;
             }
-
+            
             try {
-                let endpoint = '';
-                if (userType === 'reviewer') {
-                    endpoint = '/reviewers/me';
-                } else if (userType === 'supplier') {
-                    endpoint = '/suppliers/me';
-                } else {
-                    // For agents, we'll show a simpler profile
-                    showAgentProfile(apiKey);
-                    return;
-                }
-
-                const response = await fetch(`${API_BASE}${endpoint}`, {
-                    headers: {
-                        'X-API-Key': apiKey
-                    }
+                const response = await fetch(`${API_BASE}/users/me/detailed`, {
+                    headers: { 'X-API-Key': apiKey }
                 });
-
+                
                 if (response.ok) {
-                    currentUser = await response.json();
-                    currentUser.apiKey = apiKey;
-                    currentUser.type = userType;
+                    const userData = await response.json();
+                    currentUser = userData;
+                    userApiKey = apiKey;
                     
-                    showProfile();
-                    loadProfileData();
+                    document.getElementById('login-container').classList.add('hidden');
+                    document.getElementById('main-dashboard').classList.remove('hidden');
+                    
+                    initializeDashboard();
                 } else {
-                    const error = await response.text();
-                    alert(`Login failed: ${error}`);
+                    alert('Invalid API key or authentication failed');
                 }
             } catch (error) {
-                alert(`Login error: ${error.message}`);
+                alert('Login error: ' + error.message);
             }
-        }
-
-        function showAgentProfile(apiKey) {
-            currentUser = {
-                type: 'agent',
-                apiKey: apiKey,
-                name: 'AI Agent',
-                id: 'agent-' + Math.random().toString(36).substr(2, 9)
-            };
-            showProfile();
-            loadAgentData();
-        }
-
-        function showProfile() {
-            document.getElementById('login-section').classList.add('hidden');
-            document.getElementById('profile-content').classList.remove('hidden');
         }
 
         function logout() {
             currentUser = null;
-            document.getElementById('profile-content').classList.add('hidden');
-            document.getElementById('login-section').classList.remove('hidden');
+            userApiKey = null;
+            document.getElementById('main-dashboard').classList.add('hidden');
+            document.getElementById('login-container').classList.remove('hidden');
             document.getElementById('api-key').value = '';
         }
 
-        async function loadProfileData() {
-            if (!currentUser) return;
+        // Dashboard initialization
+        async function initializeDashboard() {
+            populateUserInfo();
+            populateQuickStats();
+            populateOverviewStats();
+            await loadListingsOrTasks();
+            await loadPayoutHistory();
+            await loadApiUsage();
+            setupCharts();
+        }
 
-            try {
-                // Load profile info
-                const profileInfo = document.getElementById('profile-info');
-                profileInfo.innerHTML = createProfileInfo();
+        function populateUserInfo() {
+            const user = currentUser.user;
+            document.getElementById('user-avatar').textContent = user.name.charAt(0);
+            document.getElementById('user-name').textContent = user.name;
+            document.getElementById('user-type-display').textContent = user.type;
+            document.getElementById('current-balance').textContent = `$${currentUser.balance.current.toFixed(6)}`;
+            document.getElementById('stellar-address').textContent = user.stellar_address || 'Not configured';
+            
+            const rolesContainer = document.getElementById('user-roles');
+            rolesContainer.innerHTML = user.roles.map(role => 
+                `<div class="role-badge ${role === user.type ? 'active' : ''}">${role}</div>`
+            ).join('');
+        }
 
-                // Load statistics
-                const statsGrid = document.getElementById('stats-grid');
-                statsGrid.innerHTML = await createStatsGrid();
-
-                // Load activity (mock for now)
-                const activityList = document.getElementById('activity-list');
-                activityList.innerHTML = createActivityList();
-
-            } catch (error) {
-                console.error('Error loading profile data:', error);
+        function populateQuickStats() {
+            const statsContainer = document.getElementById('quick-stats');
+            
+            if (currentUser.user.type === 'reviewer') {
+                statsContainer.innerHTML = `
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
+                        <span>Total Reviews:</span>
+                        <strong>${currentUser.stats.total_reviews}</strong>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
+                        <span>Consensus Rate:</span>
+                        <strong>${(currentUser.stats.consensus_rate * 100).toFixed(1)}%</strong>
+                    </div>
+                    <div style="display: flex; justify-content: space-between;">
+                        <span>Lifetime Earned:</span>
+                        <strong>$${currentUser.balance.lifetime_earned.toFixed(6)}</strong>
+                    </div>
+                `;
+            } else if (currentUser.user.type === 'supplier') {
+                const totalPackages = currentUser.packages ? currentUser.packages.length : 0;
+                const totalQueries = currentUser.packages ? currentUser.packages.reduce((sum, p) => sum + p.total_queries, 0) : 0;
+                
+                statsContainer.innerHTML = `
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
+                        <span>Active Packages:</span>
+                        <strong>${totalPackages}</strong>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
+                        <span>Total Queries:</span>
+                        <strong>${totalQueries}</strong>
+                    </div>
+                    <div style="display: flex; justify-content: space-between;">
+                        <span>Lifetime Revenue:</span>
+                        <strong>$${currentUser.balance.lifetime_earned.toFixed(6)}</strong>
+                    </div>
+                `;
             }
         }
 
-        function createProfileInfo() {
-            const user = currentUser;
-            let html = `
-                <div class="info-row">
-                    <span class="info-label">Name</span>
-                    <span class="info-value">${user.name}</span>
-                </div>
-                <div class="info-row">
-                    <span class="info-label">User Type</span>
-                    <span class="info-value">${user.type.charAt(0).toUpperCase() + user.type.slice(1)}</span>
-                </div>
-                <div class="info-row">
-                    <span class="info-label">User ID</span>
-                    <span class="info-value">#${user.id}</span>
-                </div>
-            `;
-
-            if (user.stellar_address) {
-                html += `
-                    <div class="info-row">
-                        <span class="info-label">Stellar Address</span>
-                        <span class="info-value">${user.stellar_address.substring(0, 8)}...</span>
-                    </div>
-                `;
-            }
-
-            if (user.balance !== undefined) {
-                html += `
-                    <div class="info-row">
-                        <span class="info-label">Balance</span>
-                        <span class="info-value balance-highlight">$${user.balance.toFixed(6)}</span>
-                    </div>
-                `;
-            }
-
-            if (user.reputation_level) {
-                html += `
-                    <div class="info-row">
-                        <span class="info-label">Reputation</span>
-                        <span class="reputation-badge">${user.reputation_level}</span>
-                    </div>
-                `;
-            }
-
-            return html;
-        }
-
-        async function createStatsGrid() {
-            const user = currentUser;
-            let html = '';
-
-            if (user.type === 'reviewer') {
-                html = `
-                    <div class="stat-item">
-                        <div class="stat-value">${user.stats.total_reviews || 0}</div>
+        function populateOverviewStats() {
+            const statsContainer = document.getElementById('overview-stats');
+            
+            if (currentUser.user.type === 'reviewer') {
+                statsContainer.innerHTML = `
+                    <div class="stat-card">
+                        <div class="stat-value">${currentUser.stats.total_reviews}</div>
                         <div class="stat-label">Total Reviews</div>
                     </div>
-                    <div class="stat-item">
-                        <div class="stat-value">${(user.stats.consensus_rate * 100 || 0).toFixed(1)}%</div>
+                    <div class="stat-card">
+                        <div class="stat-value">${(currentUser.stats.consensus_rate * 100).toFixed(1)}%</div>
                         <div class="stat-label">Consensus Rate</div>
                     </div>
-                    <div class="stat-item">
-                        <div class="stat-value">${user.stats.accuracy_score || 0}/10</div>
+                    <div class="stat-card">
+                        <div class="stat-value">${currentUser.stats.accuracy_score.toFixed(1)}/10</div>
                         <div class="stat-label">Accuracy Score</div>
                     </div>
-                    <div class="stat-item">
-                        <div class="stat-value">$${user.stats.total_earned || 0}</div>
-                        <div class="stat-label">Total Earned</div>
+                    <div class="stat-card">
+                        <div class="stat-value">$${currentUser.balance.lifetime_earned.toFixed(4)}</div>
+                        <div class="stat-label">Lifetime Earned</div>
                     </div>
                 `;
-            } else if (user.type === 'supplier') {
-                html = `
-                    <div class="stat-item">
-                        <div class="stat-value">${user.package_count || 0}</div>
+            } else if (currentUser.user.type === 'supplier') {
+                const totalPackages = currentUser.packages ? currentUser.packages.length : 0;
+                const totalQueries = currentUser.packages ? currentUser.packages.reduce((sum, p) => sum + p.total_queries, 0) : 0;
+                const avgRating = currentUser.packages ? (currentUser.packages.reduce((sum, p) => sum + p.avg_rating, 0) / totalPackages).toFixed(1) : '0.0';
+                
+                statsContainer.innerHTML = `
+                    <div class="stat-card">
+                        <div class="stat-value">${totalPackages}</div>
                         <div class="stat-label">Data Packages</div>
                     </div>
-                    <div class="stat-item">
-                        <div class="stat-value">$${user.balance || 0}</div>
-                        <div class="stat-label">Current Balance</div>
+                    <div class="stat-card">
+                        <div class="stat-value">${totalQueries}</div>
+                        <div class="stat-label">Total Queries</div>
                     </div>
-                    <div class="stat-item">
-                        <div class="stat-value">Active</div>
-                        <div class="stat-label">Status</div>
+                    <div class="stat-card">
+                        <div class="stat-value">${avgRating}/10</div>
+                        <div class="stat-label">Avg Rating</div>
                     </div>
-                    <div class="stat-item">
-                        <div class="stat-value">${new Date(user.created_at).toLocaleDateString()}</div>
-                        <div class="stat-label">Member Since</div>
+                    <div class="stat-card">
+                        <div class="stat-value">$${currentUser.balance.lifetime_earned.toFixed(4)}</div>
+                        <div class="stat-label">Total Revenue</div>
                     </div>
                 `;
             }
-
-            return html;
         }
 
-        function createActivityList() {
-            // Mock activity data for demo
-            const activities = [
-                {
-                    title: 'Data Query Completed',
-                    meta: '2 hours ago • Crypto Price Feed',
-                    amount: '+$0.0035'
-                },
-                {
-                    title: 'Review Submitted',
-                    meta: '5 hours ago • Package Quality Assessment',
-                    amount: '+$0.06'
-                },
-                {
-                    title: 'Consensus Bonus Earned',
-                    meta: '1 day ago • Financial Data Package',
-                    amount: '+$0.012'
+        async function loadListingsOrTasks() {
+            const tabContent = document.getElementById('listings-tab-content');
+            const tabButton = document.getElementById('listings-tab');
+            
+            if (currentUser.user.type === 'reviewer') {
+                tabButton.textContent = 'Review Tasks';
+                
+                if (currentUser.available_tasks && currentUser.available_tasks.length > 0) {
+                    tabContent.innerHTML = `
+                        <div class="card">
+                            <div class="card-header">
+                                <h3 class="card-title">Available Review Tasks</h3>
+                            </div>
+                            <div class="card-content">
+                                <div class="package-grid">
+                                    ${currentUser.available_tasks.map(task => `
+                                        <div class="package-card">
+                                            <div class="package-name">${task.package_name}</div>
+                                            <p style="color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 1rem;">
+                                                ${task.category} • ${task.task_type}
+                                            </p>
+                                            <div class="package-meta">
+                                                <div class="meta-item">
+                                                    <span class="meta-label">Reward:</span>
+                                                    <span class="meta-value">$${task.reward.toFixed(4)}</span>
+                                                </div>
+                                                <div class="meta-item">
+                                                    <span class="meta-label">Spots:</span>
+                                                    <span class="meta-value">${task.spots_remaining}</span>
+                                                </div>
+                                            </div>
+                                            <button class="btn btn-primary" style="width: 100%; margin-top: 1rem;" 
+                                                    onclick="window.open('/review-tasks/${task.id}', '_blank')">
+                                                Start Review
+                                            </button>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="card" style="margin-top: 2rem;">
+                            <div class="card-header">
+                                <h3 class="card-title">Review History</h3>
+                            </div>
+                            <div class="card-content">
+                                <table class="data-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Date</th>
+                                            <th>Package</th>
+                                            <th>Type</th>
+                                            <th>Rating</th>
+                                            <th>Earned</th>
+                                            <th>Consensus</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        ${currentUser.review_history.map(review => `
+                                            <tr>
+                                                <td>${new Date(review.date).toLocaleDateString()}</td>
+                                                <td>${review.package_name}</td>
+                                                <td style="text-transform: capitalize;">${review.task_type}</td>
+                                                <td>${review.rating_given}/10</td>
+                                                <td>$${review.earned.toFixed(6)}</td>
+                                                <td>${review.consensus ? '✅' : '❌'}</td>
+                                            </tr>
+                                        `).join('')}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    tabContent.innerHTML = `
+                        <div class="card">
+                            <div class="card-content">
+                                <p style="text-align: center; color: var(--text-secondary);">
+                                    No review tasks available at the moment.
+                                </p>
+                            </div>
+                        </div>
+                    `;
                 }
-            ];
-
-            return activities.map(activity => `
-                <div class="activity-item">
-                    <div class="activity-info">
-                        <div class="activity-title">${activity.title}</div>
-                        <div class="activity-meta">${activity.meta}</div>
-                    </div>
-                    <div class="activity-amount">${activity.amount}</div>
-                </div>
-            `).join('');
-        }
-
-        async function loadAgentData() {
-            // Simplified agent profile
-            currentUser.balance = 0.50; // Mock balance
-            loadProfileData();
-        }
-
-        function refreshProfile() {
-            if (currentUser) {
-                loadProfileData();
+            } else if (currentUser.user.type === 'supplier') {
+                tabButton.textContent = 'My Packages';
+                
+                if (currentUser.packages && currentUser.packages.length > 0) {
+                    tabContent.innerHTML = `
+                        <div class="card">
+                            <div class="card-header">
+                                <h3 class="card-title">Data Package Performance</h3>
+                            </div>
+                            <div class="card-content">
+                                <div class="package-grid">
+                                    ${currentUser.packages.map(pkg => `
+                                        <div class="package-card">
+                                            <div class="package-name">${pkg.name}</div>
+                                            <p style="color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 1rem;">
+                                                ${pkg.description}
+                                            </p>
+                                            <div class="package-meta">
+                                                <div class="meta-item">
+                                                    <span class="meta-label">Queries:</span>
+                                                    <span class="meta-value">${pkg.total_queries}</span>
+                                                </div>
+                                                <div class="meta-item">
+                                                    <span class="meta-label">Revenue:</span>
+                                                    <span class="meta-value">$${pkg.total_revenue.toFixed(4)}</span>
+                                                </div>
+                                                <div class="meta-item">
+                                                    <span class="meta-label">Rating:</span>
+                                                    <span class="meta-value">${pkg.avg_rating.toFixed(1)}/10</span>
+                                                </div>
+                                                <div class="meta-item">
+                                                    <span class="meta-label">Price:</span>
+                                                    <span class="meta-value">$${pkg.price.toFixed(6)}</span>
+                                                </div>
+                                            </div>
+                                            <button class="btn btn-accent" style="width: 100%; margin-top: 1rem;"
+                                                    onclick="viewPackageDetails(${pkg.id})">
+                                                View Details
+                                            </button>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="card" style="margin-top: 2rem;">
+                            <div class="card-header">
+                                <h3 class="card-title">Recent Usage</h3>
+                            </div>
+                            <div class="card-content">
+                                <table class="data-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Date</th>
+                                            <th>Agent</th>
+                                            <th>Package</th>
+                                            <th>Revenue</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        ${currentUser.recent_usage ? currentUser.recent_usage.slice(0, 10).map(usage => `
+                                            <tr>
+                                                <td>${new Date(usage.date).toLocaleString()}</td>
+                                                <td>${usage.agent_id}</td>
+                                                <td>${usage.package_name}</td>
+                                                <td>$${usage.revenue.toFixed(6)}</td>
+                                            </tr>
+                                        `).join('') : '<tr><td colspan="4">No recent usage</td></tr>'}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    tabContent.innerHTML = `
+                        <div class="card">
+                            <div class="card-content">
+                                <p style="text-align: center; color: var(--text-secondary);">
+                                    You haven't created any data packages yet.
+                                </p>
+                                <div style="text-align: center; margin-top: 1rem;">
+                                    <button class="btn btn-primary" onclick="createNewPackage()">
+                                        Create Your First Package
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }
             }
         }
 
-        function showRegisterInfo() {
-            alert(`To register as a new user:\n\n` +
-                  `Reviewers: POST /reviewers/register\n` +
-                  `Suppliers: POST /suppliers/register\n` +
-                  `Agents: Use POST /mint to get tokens\n\n` +
-                  `Check the API documentation for details.`);
+        async function loadPayoutHistory() {
+            try {
+                const response = await fetch(`${API_BASE}/users/me/payout-history`, {
+                    headers: { 'X-API-Key': userApiKey }
+                });
+                
+                const payouts = await response.json();
+                const tbody = document.querySelector('#payout-table tbody');
+                
+                if (payouts.length > 0) {
+                    tbody.innerHTML = payouts.map(payout => `
+                        <tr>
+                            <td>${new Date(payout.date).toLocaleDateString()}</td>
+                            <td>$${payout.amount.toFixed(6)}</td>
+                            <td style="font-family: monospace; font-size: 0.75rem;">
+                                ${payout.tx_hash.substring(0, 16)}...
+                            </td>
+                        </tr>
+                    `).join('');
+                } else {
+                    tbody.innerHTML = '<tr><td colspan="3">No payout history yet</td></tr>';
+                }
+            } catch (error) {
+                console.error('Error loading payout history:', error);
+            }
+        }
+
+        async function loadApiUsage() {
+            try {
+                const response = await fetch(`${API_BASE}/users/me/api-usage`, {
+                    headers: { 'X-API-Key': userApiKey }
+                });
+                
+                const usage = await response.json();
+                const container = document.getElementById('api-usage-stats');
+                
+                container.innerHTML = `
+                    <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; margin-bottom: 1rem;">
+                        <div style="text-align: center; padding: 1rem; border: 1px solid var(--border-primary);">
+                            <div style="font-size: 1.5rem; font-weight: 700;">${usage.current_month.calls}</div>
+                            <div style="font-size: 0.875rem; color: var(--text-secondary);">API Calls This Month</div>
+                        </div>
+                        <div style="text-align: center; padding: 1rem; border: 1px solid var(--border-primary);">
+                            <div style="font-size: 1.5rem; font-weight: 700;">${usage.current_month.data_queries}</div>
+                            <div style="font-size: 0.875rem; color: var(--text-secondary);">Data Queries</div>
+                        </div>
+                    </div>
+                    <div style="font-size: 0.875rem; color: var(--text-secondary);">
+                        Monthly limit: ${usage.current_month.limit} calls
+                    </div>
+                `;
+            } catch (error) {
+                console.error('Error loading API usage:', error);
+            }
+        }
+
+        function setupCharts() {
+            // Performance Chart
+            const perfCtx = document.getElementById('performanceChart').getContext('2d');
+            
+            if (currentUser.user.type === 'reviewer' && currentUser.monthly_earnings) {
+                const labels = currentUser.monthly_earnings.map(m => m.month);
+                const earnings = currentUser.monthly_earnings.map(m => m.earnings);
+                
+                performanceChart = new Chart(perfCtx, {
+                    type: 'line',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            label: 'Monthly Earnings',
+                            data: earnings,
+                            borderColor: '#00bcd4',
+                            backgroundColor: 'rgba(0, 188, 212, 0.1)',
+                            fill: true
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                display: false
+                            }
+                        }
+                    }
+                });
+            } else if (currentUser.user.type === 'supplier' && currentUser.monthly_revenue) {
+                const labels = currentUser.monthly_revenue.map(m => m.month);
+                const revenue = currentUser.monthly_revenue.map(m => m.revenue);
+                
+                performanceChart = new Chart(perfCtx, {
+                    type: 'bar',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            label: 'Monthly Revenue',
+                            data: revenue,
+                            backgroundColor: '#00bcd4'
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                display: false
+                            }
+                        }
+                    }
+                });
+            }
+
+            // Earnings Chart
+            const earningsCtx = document.getElementById('earningsChart').getContext('2d');
+            
+            earningsChart = new Chart(earningsCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Current Balance', 'Paid Out'],
+                    datasets: [{
+                        data: [
+                            currentUser.balance.current,
+                            currentUser.balance.lifetime_earned - currentUser.balance.current
+                        ],
+                        backgroundColor: ['#00bcd4', '#e0e0e0']
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false
+                }
+            });
+        }
+
+        // Tab Management
+        function showTab(tabName) {
+            // Hide all tabs
+            document.querySelectorAll('.tab-content').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            document.querySelectorAll('.tab-button').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            
+            // Show selected tab
+            document.getElementById(`${tabName}-tab`).classList.add('active');
+            document.querySelector(`[onclick="showTab('${tabName}')"]`).classList.add('active');
+        }
+
+        // Actions
+        async function requestPayout() {
+            if (confirm('Request payout to your Stellar wallet?')) {
+                try {
+                    const response = await fetch(`${API_BASE}/admin/process-payouts`, {
+                        method: 'POST'
+                    });
+                    const result = await response.json();
+                    alert('Payout request processed. Check your Stellar wallet.');
+                    window.location.reload();
+                } catch (error) {
+                    alert('Payout request failed: ' + error.message);
+                }
+            }
+        }
+
+        async function updatePayoutThreshold() {
+            const threshold = parseFloat(document.getElementById('payout-threshold').value);
+            if (!threshold || threshold < 0.01) {
+                alert('Please enter a valid threshold amount');
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${API_BASE}/users/me/update-payout-threshold`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-API-Key': userApiKey
+                    },
+                    body: JSON.stringify({ threshold })
+                });
+                
+                if (response.ok) {
+                    alert('Payout threshold updated successfully');
+                } else {
+                    alert('Failed to update threshold');
+                }
+            } catch (error) {
+                alert('Error: ' + error.message);
+            }
+        }
+
+        function viewPackageDetails(packageId) {
+            window.open(`/packages/${packageId}/quality`, '_blank');
+        }
+
+        function createNewPackage() {
+            alert('Package creation wizard coming soon!');
         }
 
         // Theme management
@@ -844,7 +1357,16 @@
 
         // Initialize
         initializeTheme();
-        selectUserType('reviewer');
+
+        // Auto-login for testing (remove in production)
+        document.addEventListener('DOMContentLoaded', function() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const apiKey = urlParams.get('key');
+            if (apiKey) {
+                document.getElementById('api-key').value = apiKey;
+                login();
+            }
+        });
     </script>
 </body>
 </html>

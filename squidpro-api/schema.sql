@@ -1,19 +1,37 @@
--- Core tables
-CREATE TABLE suppliers (
+-- New unified users table
+CREATE TABLE users (
     id SERIAL PRIMARY KEY,
+    email VARCHAR(255) UNIQUE NOT NULL,
     name VARCHAR(255) NOT NULL,
     stellar_address VARCHAR(56),
-    email VARCHAR(255),
-    api_key VARCHAR(64) UNIQUE,
-    status VARCHAR(20) DEFAULT 'active' CHECK (status IN ('active', 'suspended', 'pending')),
+    master_api_key VARCHAR(64) UNIQUE, -- Single key for all roles
+    roles TEXT[] DEFAULT ARRAY['buyer'], -- ['buyer', 'supplier', 'reviewer']
     created_at TIMESTAMP DEFAULT NOW()
 );
 
-CREATE TABLE reviewers (
-    id SERIAL PRIMARY KEY,
-    name VARCHAR(255) NOT NULL,
-    stellar_address VARCHAR(56),
-    created_at TIMESTAMP DEFAULT NOW()
+-- Role-specific profiles
+CREATE TABLE user_supplier_profile (
+    user_id INTEGER REFERENCES users(id),
+    business_name VARCHAR(255),
+    verified BOOLEAN DEFAULT FALSE,
+    package_count INTEGER DEFAULT 0
+);
+
+CREATE TABLE user_reviewer_profile (
+    user_id INTEGER REFERENCES users(id), 
+    reputation_level VARCHAR(20) DEFAULT 'novice',
+    specializations TEXT[],
+    total_reviews INTEGER DEFAULT 0,
+    consensus_rate DECIMAL(3,2) DEFAULT 0
+);
+
+-- Unified balance table
+CREATE TABLE user_balance (
+    user_id INTEGER REFERENCES users(id) UNIQUE,
+    total_balance_usd DECIMAL(10,6) DEFAULT 0,
+    supplier_earnings DECIMAL(10,6) DEFAULT 0,
+    reviewer_earnings DECIMAL(10,6) DEFAULT 0,
+    agent_credits DECIMAL(10,6) DEFAULT 0
 );
 
 -- Data packages/products
