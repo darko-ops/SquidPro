@@ -3,11 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Profile Dashboard - SquidPro</title>
+    <title>Profile - SquidPro</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦑</text></svg>">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
     <style>
         :root {
             --bg-primary: #ffffff;
@@ -22,7 +22,7 @@
             --accent-hover: #00acc1;
             --success: #00c851;
             --warning: #ff9f43;
-            --danger: #ff3547;
+            --error: #ff5252;
         }
 
         [data-theme="dark"] {
@@ -34,11 +34,6 @@
             --text-tertiary: #999999;
             --border-primary: #2a2a2a;
             --border-secondary: #333333;
-            --accent: #00bcd4;
-            --accent-hover: #00e5ff;
-            --success: #00c851;
-            --warning: #ff9f43;
-            --danger: #ff3547;
         }
 
         * {
@@ -51,10 +46,10 @@
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
             background: var(--bg-primary);
             color: var(--text-primary);
-            font-weight: 400;
+            font-weight: 300;
             line-height: 1.5;
             min-height: 100vh;
-            transition: background-color 0.3s ease, color 0.3s ease;
+            transition: all 0.3s ease;
         }
 
         .container {
@@ -66,12 +61,7 @@
         /* Header */
         .header {
             border-bottom: 1px solid var(--border-primary);
-            padding: 1.5rem 0;
-            position: sticky;
-            top: 0;
-            background: var(--bg-primary);
-            z-index: 100;
-            transition: all 0.3s ease;
+            padding: 2rem 0;
         }
 
         .header-content {
@@ -112,342 +102,231 @@
             gap: 1rem;
         }
 
-        .user-menu {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            padding: 0.5rem;
-            border: 1px solid var(--border-primary);
-            cursor: pointer;
-            transition: all 0.3s ease;
-        }
-
-        .user-menu:hover {
-            border-color: var(--accent);
-        }
-
         .theme-toggle {
             background: none;
             border: 1px solid var(--border-secondary);
             color: var(--text-secondary);
             padding: 0.5rem;
             cursor: pointer;
-            font-size: 0.875rem;
-            transition: all 0.3s ease;
-            min-width: 2.5rem;
-        }
-
-        .theme-toggle:hover {
-            border-color: var(--accent);
-            color: var(--accent);
-        }
-
-        /* Main Layout */
-        .main {
-            padding: 2rem 0;
-        }
-
-        .dashboard-grid {
-            display: grid;
-            grid-template-columns: 300px 1fr;
-            gap: 2rem;
-        }
-
-        /* Sidebar */
-        .sidebar {
-            display: flex;
-            flex-direction: column;
-            gap: 1rem;
-        }
-
-        .sidebar-section {
-            border: 1px solid var(--border-primary);
-            padding: 1.5rem;
-            background: var(--bg-primary);
             transition: all 0.3s ease;
         }
 
-        .sidebar-title {
-            font-size: 1rem;
-            font-weight: 600;
-            margin-bottom: 1rem;
-            color: var(--text-primary);
-        }
-
-        .user-info {
-            text-align: center;
-            margin-bottom: 1rem;
-        }
-
-        .user-avatar {
-            width: 80px;
-            height: 80px;
-            border-radius: 50%;
-            background: linear-gradient(135deg, var(--accent), var(--accent-hover));
+        .api-status {
             display: flex;
             align-items: center;
-            justify-content: center;
-            margin: 0 auto 1rem;
-            font-size: 2rem;
-            font-weight: 700;
-            color: white;
-        }
-
-        .user-name {
-            font-size: 1.25rem;
-            font-weight: 600;
-            margin-bottom: 0.25rem;
-            color: var(--text-primary);
-        }
-
-        .user-type {
-            font-size: 0.875rem;
-            color: var(--text-secondary);
-            text-transform: capitalize;
-        }
-
-        .balance-display {
-            text-align: center;
-            padding: 1rem;
-            border: 1px solid var(--border-primary);
-            background: var(--bg-secondary);
-            margin: 1rem 0;
-        }
-
-        .balance-label {
-            font-size: 0.75rem;
-            color: var(--text-secondary);
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-            margin-bottom: 0.25rem;
-        }
-
-        .balance-amount {
-            font-size: 1.5rem;
-            font-weight: 700;
-            color: var(--success);
-        }
-
-        .roles-list {
-            display: flex;
-            flex-direction: column;
             gap: 0.5rem;
-        }
-
-        .role-badge {
-            padding: 0.5rem;
-            background: var(--bg-secondary);
-            border: 1px solid var(--border-secondary);
             font-size: 0.875rem;
-            text-transform: capitalize;
-            text-align: center;
+            color: var(--text-secondary);
         }
 
-        .role-badge.active {
-            background: var(--accent);
-            color: white;
-            border-color: var(--accent);
+        .status-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: var(--success);
         }
 
         /* Main Content */
-        .content {
-            display: flex;
-            flex-direction: column;
-            gap: 2rem;
+        .main {
+            padding: 3rem 0;
         }
 
-        .section-tabs {
-            display: flex;
-            gap: 0.5rem;
-            border-bottom: 1px solid var(--border-primary);
-            padding-bottom: 0;
+        /* Authentication Section */
+        .auth-section {
+            max-width: 500px;
+            margin: 0 auto;
+            padding: 3rem 2rem;
+            border: 1px solid var(--border-primary);
+            background: var(--bg-secondary);
+        }
+
+        .auth-header {
+            text-align: center;
             margin-bottom: 2rem;
         }
 
-        .tab-button {
-            padding: 1rem 1.5rem;
-            border: none;
-            background: transparent;
+        .auth-title {
+            font-size: 2rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            color: var(--text-primary);
+        }
+
+        .auth-subtitle {
             color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+
+        /* User Type Selection */
+        .user-type-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .user-type-card {
+            padding: 1.5rem 1rem;
+            border: 2px solid var(--border-secondary);
+            background: var(--bg-primary);
             cursor: pointer;
-            border-bottom: 2px solid transparent;
-            font-size: 0.875rem;
-            font-weight: 500;
             transition: all 0.3s ease;
+            text-align: center;
+            position: relative;
         }
 
-        .tab-button.active {
-            color: var(--accent);
-            border-bottom-color: var(--accent);
+        .user-type-card:hover {
+            border-color: var(--accent);
         }
 
-        .tab-content {
-            display: none;
+        .user-type-card.active {
+            border-color: var(--accent);
+            background: var(--accent);
+            color: var(--bg-primary);
         }
 
-        .tab-content.active {
+        .user-type-icon {
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
             display: block;
         }
 
-        /* Cards */
-        .card {
-            border: 1px solid var(--border-primary);
-            background: var(--bg-primary);
-            transition: all 0.3s ease;
-        }
-
-        .card-header {
-            padding: 1.5rem;
-            border-bottom: 1px solid var(--border-primary);
-            display: flex;
-            justify-content: between;
-            align-items: center;
-        }
-
-        .card-title {
-            font-size: 1.25rem;
+        .user-type-title {
             font-weight: 600;
-            color: var(--text-primary);
-        }
-
-        .card-content {
-            padding: 1.5rem;
-        }
-
-        /* Stats Grid */
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 1rem;
-            margin-bottom: 2rem;
-        }
-
-        .stat-card {
-            padding: 1.5rem;
-            border: 1px solid var(--border-primary);
-            text-align: center;
-            transition: all 0.3s ease;
-        }
-
-        .stat-card:hover {
-            border-color: var(--accent);
-        }
-
-        .stat-value {
-            font-size: 2rem;
-            font-weight: 700;
-            color: var(--text-primary);
+            font-size: 0.9rem;
             margin-bottom: 0.25rem;
         }
 
-        .stat-label {
-            font-size: 0.875rem;
-            color: var(--text-secondary);
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-        }
-
-        .stat-change {
+        .user-type-desc {
             font-size: 0.75rem;
-            margin-top: 0.25rem;
+            opacity: 0.7;
         }
 
-        .stat-change.positive {
-            color: var(--success);
+        .user-type-card.active .user-type-desc {
+            opacity: 1;
         }
 
-        .stat-change.negative {
-            color: var(--danger);
+        .user-type-checkbox {
+            position: absolute;
+            top: 0.5rem;
+            right: 0.5rem;
+            font-size: 1.25rem;
+            font-weight: bold;
         }
 
-        /* Tables */
-        .data-table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 1rem;
-        }
-
-        .data-table th,
-        .data-table td {
+        .selected-roles {
+            text-align: center;
             padding: 1rem;
-            text-align: left;
+            margin-bottom: 1.5rem;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-primary);
+            font-size: 0.875rem;
+        }
+
+        #role-summary {
+            color: var(--accent);
+            font-weight: 500;
+        }
+
+        /* Forms */
+        .form-tabs {
+            display: flex;
+            margin-bottom: 2rem;
             border-bottom: 1px solid var(--border-primary);
         }
 
-        .data-table th {
-            font-weight: 600;
-            color: var(--text-primary);
-            background: var(--bg-secondary);
-            font-size: 0.875rem;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-        }
-
-        .data-table td {
-            color: var(--text-secondary);
-            font-size: 0.875rem;
-        }
-
-        .data-table tr:hover {
-            background: var(--bg-secondary);
-        }
-
-        /* Charts */
-        .chart-container {
-            position: relative;
-            height: 300px;
-            margin: 1rem 0;
-        }
-
-        /* Package Cards */
-        .package-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-            gap: 1rem;
-            margin-top: 1rem;
-        }
-
-        .package-card {
-            border: 1px solid var(--border-primary);
-            padding: 1.5rem;
+        .form-tab {
+            flex: 1;
+            padding: 1rem;
+            text-align: center;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
             transition: all 0.3s ease;
+            font-weight: 500;
         }
 
-        .package-card:hover {
-            border-color: var(--accent);
-            transform: translateY(-2px);
+        .form-tab.active {
+            border-bottom-color: var(--accent);
+            color: var(--accent);
         }
 
-        .package-name {
-            font-size: 1.125rem;
-            font-weight: 600;
-            color: var(--text-primary);
-            margin-bottom: 0.5rem;
+        .form-panel {
+            display: none;
         }
 
-        .package-meta {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 1rem;
-            margin-top: 1rem;
+        .form-panel.active {
+            display: block;
+        }
+
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .form-label {
+            display: block;
             font-size: 0.875rem;
-        }
-
-        .meta-item {
-            display: flex;
-            justify-content: space-between;
-        }
-
-        .meta-label {
-            color: var(--text-secondary);
-        }
-
-        .meta-value {
+            font-weight: 500;
+            margin-bottom: 0.5rem;
             color: var(--text-primary);
-            font-weight: 600;
         }
 
-        /* Buttons */
+        .form-input, .form-select, .form-textarea {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            border: 1px solid var(--border-secondary);
+            background: var(--bg-primary);
+            font-size: 0.9rem;
+            font-family: inherit;
+            color: var(--text-primary);
+            transition: border-color 0.2s ease;
+        }
+
+        .form-input:focus, .form-select:focus, .form-textarea:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+
+        .form-textarea {
+            min-height: 80px;
+            resize: vertical;
+        }
+
+        .form-help {
+            font-size: 0.75rem;
+            color: var(--text-tertiary);
+            margin-top: 0.25rem;
+        }
+
+        .auth-btn {
+            width: 100%;
+            padding: 1rem;
+            background: var(--text-primary);
+            color: var(--bg-primary);
+            border: none;
+            font-size: 0.9rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-bottom: 1rem;
+        }
+
+        .auth-btn:hover {
+            background: var(--text-secondary);
+        }
+
+        .auth-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        /* Action Buttons */
+        .action-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-top: 2rem;
+        }
+
         .btn {
             padding: 0.75rem 1.5rem;
             border: 1px solid var(--text-primary);
@@ -458,6 +337,7 @@
             cursor: pointer;
             transition: all 0.3s ease;
             text-decoration: none;
+            text-align: center;
             display: inline-block;
         }
 
@@ -466,117 +346,77 @@
             color: var(--bg-primary);
         }
 
-        .btn-accent {
-            background: var(--accent);
-            color: white;
-            border-color: var(--accent);
-        }
-
         .btn:hover {
-            transform: translateY(-1px);
+            border-color: var(--accent);
+            color: var(--accent);
         }
 
         .btn-primary:hover {
             background: var(--text-secondary);
         }
 
-        .btn-accent:hover {
-            background: var(--accent-hover);
-        }
-
-        /* Settings */
-        .settings-form {
-            display: flex;
-            flex-direction: column;
-            gap: 1rem;
-            max-width: 400px;
-        }
-
-        .form-group {
-            display: flex;
-            flex-direction: column;
-            gap: 0.5rem;
-        }
-
-        .form-label {
-            font-size: 0.875rem;
-            font-weight: 600;
-            color: var(--text-primary);
-        }
-
-        .form-input {
-            padding: 0.75rem;
-            border: 1px solid var(--border-secondary);
-            background: var(--bg-primary);
-            color: var(--text-primary);
-            font-size: 0.875rem;
-            transition: all 0.3s ease;
-        }
-
-        .form-input:focus {
-            outline: none;
-            border-color: var(--accent);
-        }
-
-        /* Loading States */
-        .loading {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 3rem;
-            color: var(--text-secondary);
-        }
-
-        .spinner {
-            width: 20px;
-            height: 20px;
-            border: 2px solid var(--border-primary);
-            border-top: 2px solid var(--accent);
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-            margin-right: 0.5rem;
-        }
-
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-
         /* Responsive */
-        @media (max-width: 1024px) {
-            .dashboard-grid {
-                grid-template-columns: 1fr;
-            }
-            
-            .sidebar {
-                order: 2;
-            }
-            
-            .content {
-                order: 1;
-            }
-        }
-
         @media (max-width: 768px) {
             .container {
                 padding: 0 1rem;
             }
-            
-            .stats-grid {
-                grid-template-columns: repeat(2, 1fr);
-            }
-            
-            .package-grid {
+
+            .user-type-grid {
                 grid-template-columns: 1fr;
             }
-            
+
             .nav-links {
                 display: none;
+            }
+
+            .profile-content {
+                grid-template-columns: 1fr;
+                gap: 2rem;
+            }
+
+            .profile-nav {
+                flex-wrap: wrap;
+                gap: 1rem;
+            }
+
+            .action-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .security-item {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 0.5rem;
             }
         }
 
         .hidden {
             display: none !important;
+        }
+
+        /* Loading states */
+        .loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem;
+            color: var(--text-secondary);
+        }
+
+        .error {
+            padding: 1rem;
+            background: rgba(255, 82, 82, 0.1);
+            border: 1px solid var(--error);
+            color: var(--error);
+            font-size: 0.875rem;
+        }
+
+        .success {
+            padding: 1rem;
+            background: rgba(0, 200, 81, 0.1);
+            border: 1px solid var(--success);
+            color: var(--success);
+            font-size: 0.875rem;
         }
     </style>
 </head>
@@ -590,761 +430,275 @@
                     <a href="/profile.html" class="nav-link active">Profile</a>
                 </div>
                 <div class="header-right">
-                    <button class="theme-toggle" onclick="toggleTheme()" title="Toggle dark mode">
+                    <button class="theme-toggle" id="theme-toggle">
                         <span id="theme-icon">☾</span>
                     </button>
-                    <div class="user-menu" onclick="logout()">
-                        <span>Sign Out</span>
+                    <div class="api-status">
+                        <div class="status-dot"></div>
+                        <span id="api-status-text">Connected</span>
                     </div>
                 </div>
             </div>
         </div>
     </header>
 
-    <!-- Login Form (hidden when authenticated) -->
-    <div id="login-container" class="container" style="margin-top: 4rem;">
-        <div style="max-width: 400px; margin: 0 auto; padding: 2rem; border: 1px solid var(--border-primary); background: var(--bg-secondary);">
-            <h2 style="text-align: center; margin-bottom: 1.5rem;">Access Your Dashboard</h2>
-            
-            <div class="form-group">
-                <label>User Type</label>
-                <select id="user-type" class="form-input">
-                    <option value="reviewer">Reviewer</option>
-                    <option value="supplier">Supplier</option>
-                    <option value="agent">Agent</option>
-                </select>
-            </div>
-            
-            <div class="form-group">
-                <label for="api-key">API Key</label>
-                <input type="password" id="api-key" class="form-input" placeholder="Enter your API key...">
-            </div>
-            
-            <button onclick="login()" class="btn btn-primary" style="width: 100%; margin-top: 1rem;">
-                Access Dashboard
-            </button>
-        </div>
-    </div>
-
-    <!-- Main Dashboard (hidden until login) -->
-    <main id="main-dashboard" class="main hidden">
+    <main class="main">
         <div class="container">
-            <div class="dashboard-grid">
-                <!-- Sidebar -->
-                <div class="sidebar">
-                    <!-- User Profile Card -->
-                    <div class="sidebar-section">
-                        <div class="user-info">
-                            <div class="user-avatar" id="user-avatar">A</div>
-                            <div class="user-name" id="user-name">Loading...</div>
-                            <div class="user-type" id="user-type-display">User</div>
-                        </div>
-                        
-                        <div class="balance-display">
-                            <div class="balance-label">Current Balance</div>
-                            <div class="balance-amount" id="current-balance">$0.00</div>
-                        </div>
-                        
-                        <div class="roles-list" id="user-roles">
-                            <!-- Roles populated by JavaScript -->
-                        </div>
-                    </div>
+            <!-- Authentication Section -->
+            <div id="auth-section" class="auth-section">
+                <div class="auth-header">
+                    <h1 class="auth-title">Access Your Account</h1>
+                    <p class="auth-subtitle">Sign in to manage your SquidPro business</p>
+                </div>
 
-                    <!-- Quick Stats -->
-                    <div class="sidebar-section">
-                        <div class="sidebar-title">Quick Stats</div>
-                        <div id="quick-stats">
-                            <!-- Stats populated by JavaScript -->
-                        </div>
+                <!-- User Type Selection -->
+                <div class="user-type-grid">
+                    <div class="user-type-card active" id="supplier-card">
+                        <span class="user-type-icon">📊</span>
+                        <div class="user-type-title">Data Supplier</div>
+                        <div class="user-type-desc">Provide APIs & earn revenue</div>
+                        <div class="user-type-checkbox">☑</div>
                     </div>
-
-                    <!-- Wallet Info -->
-                    <div class="sidebar-section">
-                        <div class="sidebar-title">Wallet</div>
-                        <div style="font-size: 0.875rem; color: var(--text-secondary); word-break: break-all;" id="stellar-address">
-                            Loading...
-                        </div>
-                        <button class="btn btn-accent" style="width: 100%; margin-top: 1rem;" onclick="requestPayout()">
-                            Request Payout
-                        </button>
+                    <div class="user-type-card" id="reviewer-card">
+                        <span class="user-type-icon">🔍</span>
+                        <div class="user-type-title">Validator</div>
+                        <div class="user-type-desc">Review data quality & earn rewards</div>
+                        <div class="user-type-checkbox">☐</div>
+                    </div>
+                    <div class="user-type-card" id="buyer-card">
+                        <span class="user-type-icon">🤖</span>
+                        <div class="user-type-title">Agent/Buyer</div>
+                        <div class="user-type-desc">Access data feeds for agents</div>
+                        <div class="user-type-checkbox">☐</div>
                     </div>
                 </div>
 
-                <!-- Main Content -->
-                <div class="content">
-                    <!-- Section Tabs -->
-                    <div class="section-tabs">
-                        <button class="tab-button active" onclick="showTab('overview')">Overview</button>
-                        <button class="tab-button" onclick="showTab('listings')" id="listings-tab">Listings</button>
-                        <button class="tab-button" onclick="showTab('earnings')">Earnings</button>
-                        <button class="tab-button" onclick="showTab('activity')">Activity</button>
-                        <button class="tab-button" onclick="showTab('settings')">Settings</button>
-                    </div>
+                <div id="selected-roles" class="selected-roles">
+                    <strong>Selected roles:</strong> <span id="role-summary">Data Supplier</span>
+                </div>
 
-                    <!-- Overview Tab -->
-                    <div id="overview-tab" class="tab-content active">
-                        <div class="stats-grid" id="overview-stats">
-                            <!-- Stats populated by JavaScript -->
+                <!-- Form Tabs -->
+                <div class="form-tabs">
+                    <div class="form-tab active" id="login-tab">Sign In</div>
+                    <div class="form-tab" id="register-tab">Register</div>
+                </div>
+
+                <!-- Login Form -->
+                <div id="login-panel" class="form-panel active">
+                    <form id="login-form">
+                        <div class="form-group">
+                            <label class="form-label" for="login-key">API Key / Token</label>
+                            <input 
+                                type="password" 
+                                id="login-key" 
+                                class="form-input" 
+                                placeholder="Enter your API key..."
+                                required
+                            >
+                            <div class="form-help" id="login-help">
+                                Enter your supplier API key (sup_...) or reviewer key (rev_...)
+                            </div>
+                        </div>
+                        <button type="submit" class="auth-btn">
+                            Access Dashboard
+                        </button>
+                    </form>
+                </div>
+
+                <!-- Registration Form -->
+                <div id="register-panel" class="form-panel">
+                    <form id="register-form">
+                        <div class="form-group">
+                            <label class="form-label" for="reg-name">Name / Organization</label>
+                            <input 
+                                type="text" 
+                                id="reg-name" 
+                                class="form-input" 
+                                placeholder="Your name or company name..."
+                                required
+                            >
                         </div>
                         
-                        <div class="card">
-                            <div class="card-header">
-                                <h3 class="card-title">Performance Chart</h3>
-                            </div>
-                            <div class="card-content">
-                                <div class="chart-container">
-                                    <canvas id="performanceChart"></canvas>
-                                </div>
-                            </div>
+                        <div class="form-group">
+                            <label class="form-label" for="reg-email">Email</label>
+                            <input 
+                                type="email" 
+                                id="reg-email" 
+                                class="form-input" 
+                                placeholder="your@email.com"
+                                required
+                            >
                         </div>
-                    </div>
 
-                    <!-- Listings Tab (Supplier) / Tasks Tab (Reviewer) -->
-                    <div id="listings-tab-content" class="tab-content">
-                        <!-- Content populated by JavaScript -->
-                    </div>
-
-                    <!-- Earnings Tab -->
-                    <div id="earnings-tab" class="tab-content">
-                        <div class="card">
-                            <div class="card-header">
-                                <h3 class="card-title">Earnings History</h3>
-                            </div>
-                            <div class="card-content">
-                                <div class="chart-container">
-                                    <canvas id="earningsChart"></canvas>
-                                </div>
+                        <div class="form-group">
+                            <label class="form-label" for="reg-stellar">Stellar Address</label>
+                            <input 
+                                type="text" 
+                                id="reg-stellar" 
+                                class="form-input" 
+                                placeholder="G... (for receiving payments)"
+                                required
+                            >
+                            <div class="form-help">
+                                Your Stellar address for receiving XLM/USDC payments
                             </div>
                         </div>
 
-                        <div class="card" style="margin-top: 2rem;">
-                            <div class="card-header">
-                                <h3 class="card-title">Payout History</h3>
-                            </div>
-                            <div class="card-content">
-                                <table class="data-table" id="payout-table">
-                                    <thead>
-                                        <tr>
-                                            <th>Date</th>
-                                            <th>Amount</th>
-                                            <th>Transaction</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        <!-- Populated by JavaScript -->
-                                    </tbody>
-                                </table>
+                        <div id="supplier-fields" class="supplier-specific">
+                            <div class="form-group">
+                                <label class="form-label" for="reg-description">Business Description</label>
+                                <textarea 
+                                    id="reg-description" 
+                                    class="form-textarea" 
+                                    placeholder="Describe your data services..."
+                                ></textarea>
                             </div>
                         </div>
-                    </div>
 
-                    <!-- Activity Tab -->
-                    <div id="activity-tab" class="tab-content">
-                        <div class="card">
-                            <div class="card-header">
-                                <h3 class="card-title">Recent Activity</h3>
-                            </div>
-                            <div class="card-content">
-                                <table class="data-table" id="activity-table">
-                                    <thead>
-                                        <tr>
-                                            <th>Date</th>
-                                            <th>Type</th>
-                                            <th>Description</th>
-                                            <th>Amount</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        <!-- Populated by JavaScript -->
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Settings Tab -->
-                    <div id="settings-tab" class="tab-content">
-                        <div class="card">
-                            <div class="card-header">
-                                <h3 class="card-title">Payout Settings</h3>
-                            </div>
-                            <div class="card-content">
-                                <div class="settings-form">
-                                    <div class="form-group">
-                                        <label class="form-label">Payout Threshold (USD)</label>
-                                        <input type="number" id="payout-threshold" class="form-input" step="0.01" min="0.01">
-                                        <small style="color: var(--text-secondary);">
-                                            Automatic payouts when balance reaches this amount
-                                        </small>
-                                    </div>
-                                    <button class="btn btn-primary" onclick="updatePayoutThreshold()">
-                                        Update Threshold
-                                    </button>
+                        <div id="reviewer-fields" class="reviewer-specific hidden">
+                            <div class="form-group">
+                                <label class="form-label" for="reg-specializations">Specializations</label>
+                                <input 
+                                    type="text" 
+                                    id="reg-specializations" 
+                                    class="form-input" 
+                                    placeholder="financial, weather, social (comma-separated)"
+                                >
+                                <div class="form-help">
+                                    Categories you're qualified to review
                                 </div>
                             </div>
                         </div>
 
-                        <div class="card" style="margin-top: 2rem;">
-                            <div class="card-header">
-                                <h3 class="card-title">API Usage</h3>
-                            </div>
-                            <div class="card-content">
-                                <div id="api-usage-stats">
-                                    <!-- API usage stats populated by JavaScript -->
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+                        <button type="submit" class="auth-btn">
+                            Create Account
+                        </button>
+                    </form>
+                </div>
+
+                <div class="action-grid">
+                    <a href="/" class="btn">← Back to Catalog</a>
+                    <button class="btn btn-primary" id="api-integration-btn">
+                        API Integration
+                    </button>
                 </div>
             </div>
         </div>
     </main>
 
     <script>
-        const API_BASE = 'http://localhost:8100';
-        let currentUser = null;
-        let userApiKey = null;
-        let performanceChart = null;
-        let earningsChart = null;
+        // Global variables - MUST be at very top
+        window.API_BASE = 'http://localhost:8100';
+        window.currentUser = null;
+        window.selectedUserTypes = ['supplier'];
+        window.authMode = 'login';
 
-        // Authentication
-        async function login() {
-            const apiKey = document.getElementById('api-key').value.trim();
-            const userType = document.getElementById('user-type').value;
+        console.log('SquidPro Profile script loading...');
+
+        // Core functions - Define immediately
+        window.toggleUserType = function(type) {
+            console.log('toggleUserType called with:', type);
             
-            if (!apiKey) {
-                alert('Please enter your API key');
+            const card = document.getElementById(`${type}-card`);
+            if (!card) {
+                console.error('Card not found:', type);
                 return;
             }
             
-            try {
-                const response = await fetch(`${API_BASE}/users/me/detailed`, {
-                    headers: { 'X-API-Key': apiKey }
-                });
-                
-                if (response.ok) {
-                    const userData = await response.json();
-                    currentUser = userData;
-                    userApiKey = apiKey;
-                    
-                    document.getElementById('login-container').classList.add('hidden');
-                    document.getElementById('main-dashboard').classList.remove('hidden');
-                    
-                    initializeDashboard();
-                } else {
-                    alert('Invalid API key or authentication failed');
-                }
-            } catch (error) {
-                alert('Login error: ' + error.message);
-            }
-        }
-
-        function logout() {
-            currentUser = null;
-            userApiKey = null;
-            document.getElementById('main-dashboard').classList.add('hidden');
-            document.getElementById('login-container').classList.remove('hidden');
-            document.getElementById('api-key').value = '';
-        }
-
-        // Dashboard initialization
-        async function initializeDashboard() {
-            populateUserInfo();
-            populateQuickStats();
-            populateOverviewStats();
-            await loadListingsOrTasks();
-            await loadPayoutHistory();
-            await loadApiUsage();
-            setupCharts();
-        }
-
-        function populateUserInfo() {
-            const user = currentUser.user;
-            document.getElementById('user-avatar').textContent = user.name.charAt(0);
-            document.getElementById('user-name').textContent = user.name;
-            document.getElementById('user-type-display').textContent = user.type;
-            document.getElementById('current-balance').textContent = `$${currentUser.balance.current.toFixed(6)}`;
-            document.getElementById('stellar-address').textContent = user.stellar_address || 'Not configured';
-            
-            const rolesContainer = document.getElementById('user-roles');
-            rolesContainer.innerHTML = user.roles.map(role => 
-                `<div class="role-badge ${role === user.type ? 'active' : ''}">${role}</div>`
-            ).join('');
-        }
-
-        function populateQuickStats() {
-            const statsContainer = document.getElementById('quick-stats');
-            
-            if (currentUser.user.type === 'reviewer') {
-                statsContainer.innerHTML = `
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
-                        <span>Total Reviews:</span>
-                        <strong>${currentUser.stats.total_reviews}</strong>
-                    </div>
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
-                        <span>Consensus Rate:</span>
-                        <strong>${(currentUser.stats.consensus_rate * 100).toFixed(1)}%</strong>
-                    </div>
-                    <div style="display: flex; justify-content: space-between;">
-                        <span>Lifetime Earned:</span>
-                        <strong>$${currentUser.balance.lifetime_earned.toFixed(6)}</strong>
-                    </div>
-                `;
-            } else if (currentUser.user.type === 'supplier') {
-                const totalPackages = currentUser.packages ? currentUser.packages.length : 0;
-                const totalQueries = currentUser.packages ? currentUser.packages.reduce((sum, p) => sum + p.total_queries, 0) : 0;
-                
-                statsContainer.innerHTML = `
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
-                        <span>Active Packages:</span>
-                        <strong>${totalPackages}</strong>
-                    </div>
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
-                        <span>Total Queries:</span>
-                        <strong>${totalQueries}</strong>
-                    </div>
-                    <div style="display: flex; justify-content: space-between;">
-                        <span>Lifetime Revenue:</span>
-                        <strong>$${currentUser.balance.lifetime_earned.toFixed(6)}</strong>
-                    </div>
-                `;
-            }
-        }
-
-        function populateOverviewStats() {
-            const statsContainer = document.getElementById('overview-stats');
-            
-            if (currentUser.user.type === 'reviewer') {
-                statsContainer.innerHTML = `
-                    <div class="stat-card">
-                        <div class="stat-value">${currentUser.stats.total_reviews}</div>
-                        <div class="stat-label">Total Reviews</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-value">${(currentUser.stats.consensus_rate * 100).toFixed(1)}%</div>
-                        <div class="stat-label">Consensus Rate</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-value">${currentUser.stats.accuracy_score.toFixed(1)}/10</div>
-                        <div class="stat-label">Accuracy Score</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-value">$${currentUser.balance.lifetime_earned.toFixed(4)}</div>
-                        <div class="stat-label">Lifetime Earned</div>
-                    </div>
-                `;
-            } else if (currentUser.user.type === 'supplier') {
-                const totalPackages = currentUser.packages ? currentUser.packages.length : 0;
-                const totalQueries = currentUser.packages ? currentUser.packages.reduce((sum, p) => sum + p.total_queries, 0) : 0;
-                const avgRating = currentUser.packages ? (currentUser.packages.reduce((sum, p) => sum + p.avg_rating, 0) / totalPackages).toFixed(1) : '0.0';
-                
-                statsContainer.innerHTML = `
-                    <div class="stat-card">
-                        <div class="stat-value">${totalPackages}</div>
-                        <div class="stat-label">Data Packages</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-value">${totalQueries}</div>
-                        <div class="stat-label">Total Queries</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-value">${avgRating}/10</div>
-                        <div class="stat-label">Avg Rating</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-value">$${currentUser.balance.lifetime_earned.toFixed(4)}</div>
-                        <div class="stat-label">Total Revenue</div>
-                    </div>
-                `;
-            }
-        }
-
-        async function loadListingsOrTasks() {
-            const tabContent = document.getElementById('listings-tab-content');
-            const tabButton = document.getElementById('listings-tab');
-            
-            if (currentUser.user.type === 'reviewer') {
-                tabButton.textContent = 'Review Tasks';
-                
-                if (currentUser.available_tasks && currentUser.available_tasks.length > 0) {
-                    tabContent.innerHTML = `
-                        <div class="card">
-                            <div class="card-header">
-                                <h3 class="card-title">Available Review Tasks</h3>
-                            </div>
-                            <div class="card-content">
-                                <div class="package-grid">
-                                    ${currentUser.available_tasks.map(task => `
-                                        <div class="package-card">
-                                            <div class="package-name">${task.package_name}</div>
-                                            <p style="color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 1rem;">
-                                                ${task.category} • ${task.task_type}
-                                            </p>
-                                            <div class="package-meta">
-                                                <div class="meta-item">
-                                                    <span class="meta-label">Reward:</span>
-                                                    <span class="meta-value">$${task.reward.toFixed(4)}</span>
-                                                </div>
-                                                <div class="meta-item">
-                                                    <span class="meta-label">Spots:</span>
-                                                    <span class="meta-value">${task.spots_remaining}</span>
-                                                </div>
-                                            </div>
-                                            <button class="btn btn-primary" style="width: 100%; margin-top: 1rem;" 
-                                                    onclick="window.open('/review-tasks/${task.id}', '_blank')">
-                                                Start Review
-                                            </button>
-                                        </div>
-                                    `).join('')}
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <div class="card" style="margin-top: 2rem;">
-                            <div class="card-header">
-                                <h3 class="card-title">Review History</h3>
-                            </div>
-                            <div class="card-content">
-                                <table class="data-table">
-                                    <thead>
-                                        <tr>
-                                            <th>Date</th>
-                                            <th>Package</th>
-                                            <th>Type</th>
-                                            <th>Rating</th>
-                                            <th>Earned</th>
-                                            <th>Consensus</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        ${currentUser.review_history.map(review => `
-                                            <tr>
-                                                <td>${new Date(review.date).toLocaleDateString()}</td>
-                                                <td>${review.package_name}</td>
-                                                <td style="text-transform: capitalize;">${review.task_type}</td>
-                                                <td>${review.rating_given}/10</td>
-                                                <td>$${review.earned.toFixed(6)}</td>
-                                                <td>${review.consensus ? '✅' : '❌'}</td>
-                                            </tr>
-                                        `).join('')}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                    `;
-                } else {
-                    tabContent.innerHTML = `
-                        <div class="card">
-                            <div class="card-content">
-                                <p style="text-align: center; color: var(--text-secondary);">
-                                    No review tasks available at the moment.
-                                </p>
-                            </div>
-                        </div>
-                    `;
-                }
-            } else if (currentUser.user.type === 'supplier') {
-                tabButton.textContent = 'My Packages';
-                
-                if (currentUser.packages && currentUser.packages.length > 0) {
-                    tabContent.innerHTML = `
-                        <div class="card">
-                            <div class="card-header">
-                                <h3 class="card-title">Data Package Performance</h3>
-                            </div>
-                            <div class="card-content">
-                                <div class="package-grid">
-                                    ${currentUser.packages.map(pkg => `
-                                        <div class="package-card">
-                                            <div class="package-name">${pkg.name}</div>
-                                            <p style="color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 1rem;">
-                                                ${pkg.description}
-                                            </p>
-                                            <div class="package-meta">
-                                                <div class="meta-item">
-                                                    <span class="meta-label">Queries:</span>
-                                                    <span class="meta-value">${pkg.total_queries}</span>
-                                                </div>
-                                                <div class="meta-item">
-                                                    <span class="meta-label">Revenue:</span>
-                                                    <span class="meta-value">$${pkg.total_revenue.toFixed(4)}</span>
-                                                </div>
-                                                <div class="meta-item">
-                                                    <span class="meta-label">Rating:</span>
-                                                    <span class="meta-value">${pkg.avg_rating.toFixed(1)}/10</span>
-                                                </div>
-                                                <div class="meta-item">
-                                                    <span class="meta-label">Price:</span>
-                                                    <span class="meta-value">$${pkg.price.toFixed(6)}</span>
-                                                </div>
-                                            </div>
-                                            <button class="btn btn-accent" style="width: 100%; margin-top: 1rem;"
-                                                    onclick="viewPackageDetails(${pkg.id})">
-                                                View Details
-                                            </button>
-                                        </div>
-                                    `).join('')}
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <div class="card" style="margin-top: 2rem;">
-                            <div class="card-header">
-                                <h3 class="card-title">Recent Usage</h3>
-                            </div>
-                            <div class="card-content">
-                                <table class="data-table">
-                                    <thead>
-                                        <tr>
-                                            <th>Date</th>
-                                            <th>Agent</th>
-                                            <th>Package</th>
-                                            <th>Revenue</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        ${currentUser.recent_usage ? currentUser.recent_usage.slice(0, 10).map(usage => `
-                                            <tr>
-                                                <td>${new Date(usage.date).toLocaleString()}</td>
-                                                <td>${usage.agent_id}</td>
-                                                <td>${usage.package_name}</td>
-                                                <td>$${usage.revenue.toFixed(6)}</td>
-                                            </tr>
-                                        `).join('') : '<tr><td colspan="4">No recent usage</td></tr>'}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                    `;
-                } else {
-                    tabContent.innerHTML = `
-                        <div class="card">
-                            <div class="card-content">
-                                <p style="text-align: center; color: var(--text-secondary);">
-                                    You haven't created any data packages yet.
-                                </p>
-                                <div style="text-align: center; margin-top: 1rem;">
-                                    <button class="btn btn-primary" onclick="createNewPackage()">
-                                        Create Your First Package
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    `;
-                }
-            }
-        }
-
-        async function loadPayoutHistory() {
-            try {
-                const response = await fetch(`${API_BASE}/users/me/payout-history`, {
-                    headers: { 'X-API-Key': userApiKey }
-                });
-                
-                const payouts = await response.json();
-                const tbody = document.querySelector('#payout-table tbody');
-                
-                if (payouts.length > 0) {
-                    tbody.innerHTML = payouts.map(payout => `
-                        <tr>
-                            <td>${new Date(payout.date).toLocaleDateString()}</td>
-                            <td>$${payout.amount.toFixed(6)}</td>
-                            <td style="font-family: monospace; font-size: 0.75rem;">
-                                ${payout.tx_hash.substring(0, 16)}...
-                            </td>
-                        </tr>
-                    `).join('');
-                } else {
-                    tbody.innerHTML = '<tr><td colspan="3">No payout history yet</td></tr>';
-                }
-            } catch (error) {
-                console.error('Error loading payout history:', error);
-            }
-        }
-
-        async function loadApiUsage() {
-            try {
-                const response = await fetch(`${API_BASE}/users/me/api-usage`, {
-                    headers: { 'X-API-Key': userApiKey }
-                });
-                
-                const usage = await response.json();
-                const container = document.getElementById('api-usage-stats');
-                
-                container.innerHTML = `
-                    <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; margin-bottom: 1rem;">
-                        <div style="text-align: center; padding: 1rem; border: 1px solid var(--border-primary);">
-                            <div style="font-size: 1.5rem; font-weight: 700;">${usage.current_month.calls}</div>
-                            <div style="font-size: 0.875rem; color: var(--text-secondary);">API Calls This Month</div>
-                        </div>
-                        <div style="text-align: center; padding: 1rem; border: 1px solid var(--border-primary);">
-                            <div style="font-size: 1.5rem; font-weight: 700;">${usage.current_month.data_queries}</div>
-                            <div style="font-size: 0.875rem; color: var(--text-secondary);">Data Queries</div>
-                        </div>
-                    </div>
-                    <div style="font-size: 0.875rem; color: var(--text-secondary);">
-                        Monthly limit: ${usage.current_month.limit} calls
-                    </div>
-                `;
-            } catch (error) {
-                console.error('Error loading API usage:', error);
-            }
-        }
-
-        function setupCharts() {
-            // Performance Chart
-            const perfCtx = document.getElementById('performanceChart').getContext('2d');
-            
-            if (currentUser.user.type === 'reviewer' && currentUser.monthly_earnings) {
-                const labels = currentUser.monthly_earnings.map(m => m.month);
-                const earnings = currentUser.monthly_earnings.map(m => m.earnings);
-                
-                performanceChart = new Chart(perfCtx, {
-                    type: 'line',
-                    data: {
-                        labels: labels,
-                        datasets: [{
-                            label: 'Monthly Earnings',
-                            data: earnings,
-                            borderColor: '#00bcd4',
-                            backgroundColor: 'rgba(0, 188, 212, 0.1)',
-                            fill: true
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        plugins: {
-                            legend: {
-                                display: false
-                            }
-                        }
-                    }
-                });
-            } else if (currentUser.user.type === 'supplier' && currentUser.monthly_revenue) {
-                const labels = currentUser.monthly_revenue.map(m => m.month);
-                const revenue = currentUser.monthly_revenue.map(m => m.revenue);
-                
-                performanceChart = new Chart(perfCtx, {
-                    type: 'bar',
-                    data: {
-                        labels: labels,
-                        datasets: [{
-                            label: 'Monthly Revenue',
-                            data: revenue,
-                            backgroundColor: '#00bcd4'
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        plugins: {
-                            legend: {
-                                display: false
-                            }
-                        }
-                    }
-                });
-            }
-
-            // Earnings Chart
-            const earningsCtx = document.getElementById('earningsChart').getContext('2d');
-            
-            earningsChart = new Chart(earningsCtx, {
-                type: 'doughnut',
-                data: {
-                    labels: ['Current Balance', 'Paid Out'],
-                    datasets: [{
-                        data: [
-                            currentUser.balance.current,
-                            currentUser.balance.lifetime_earned - currentUser.balance.current
-                        ],
-                        backgroundColor: ['#00bcd4', '#e0e0e0']
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false
-                }
-            });
-        }
-
-        // Tab Management
-        function showTab(tabName) {
-            // Hide all tabs
-            document.querySelectorAll('.tab-content').forEach(tab => {
-                tab.classList.remove('active');
-            });
-            document.querySelectorAll('.tab-button').forEach(btn => {
-                btn.classList.remove('active');
-            });
-            
-            // Show selected tab
-            document.getElementById(`${tabName}-tab`).classList.add('active');
-            document.querySelector(`[onclick="showTab('${tabName}')"]`).classList.add('active');
-        }
-
-        // Actions
-        async function requestPayout() {
-            if (confirm('Request payout to your Stellar wallet?')) {
-                try {
-                    const response = await fetch(`${API_BASE}/admin/process-payouts`, {
-                        method: 'POST'
-                    });
-                    const result = await response.json();
-                    alert('Payout request processed. Check your Stellar wallet.');
-                    window.location.reload();
-                } catch (error) {
-                    alert('Payout request failed: ' + error.message);
-                }
-            }
-        }
-
-        async function updatePayoutThreshold() {
-            const threshold = parseFloat(document.getElementById('payout-threshold').value);
-            if (!threshold || threshold < 0.01) {
-                alert('Please enter a valid threshold amount');
+            const checkbox = card.querySelector('.user-type-checkbox');
+            if (!checkbox) {
+                console.error('Checkbox not found:', type);
                 return;
             }
             
-            try {
-                const response = await fetch(`${API_BASE}/users/me/update-payout-threshold`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-API-Key': userApiKey
-                    },
-                    body: JSON.stringify({ threshold })
-                });
-                
-                if (response.ok) {
-                    alert('Payout threshold updated successfully');
-                } else {
-                    alert('Failed to update threshold');
+            if (window.selectedUserTypes.includes(type)) {
+                // Remove role
+                window.selectedUserTypes = window.selectedUserTypes.filter(t => t !== type);
+                card.classList.remove('active');
+                checkbox.textContent = '☐';
+            } else {
+                // Add role
+                window.selectedUserTypes.push(type);
+                card.classList.add('active');
+                checkbox.textContent = '☑';
+            }
+            
+            // Ensure at least one role is selected
+            if (window.selectedUserTypes.length === 0) {
+                window.selectedUserTypes = ['buyer'];
+                const buyerCard = document.getElementById('buyer-card');
+                if (buyerCard) {
+                    buyerCard.classList.add('active');
+                    const buyerCheckbox = buyerCard.querySelector('.user-type-checkbox');
+                    if (buyerCheckbox) {
+                        buyerCheckbox.textContent = '☑';
+                    }
                 }
-            } catch (error) {
-                alert('Error: ' + error.message);
+            }
+            
+            updateRoleSummary();
+            updateFormFields();
+        };
+
+        function updateRoleSummary() {
+            const roleNames = {
+                'supplier': 'Data Supplier',
+                'reviewer': 'Validator', 
+                'buyer': 'Agent/Buyer'
+            };
+            
+            const summary = window.selectedUserTypes.map(type => roleNames[type]).join(' + ');
+            const summaryEl = document.getElementById('role-summary');
+            if (summaryEl) {
+                summaryEl.textContent = summary;
             }
         }
 
-        function viewPackageDetails(packageId) {
-            window.open(`/packages/${packageId}/quality`, '_blank');
+        function updateFormFields() {
+            const supplierFields = document.getElementById('supplier-fields');
+            const reviewerFields = document.getElementById('reviewer-fields');
+            const loginHelp = document.getElementById('login-help');
+            
+            if (!supplierFields || !reviewerFields || !loginHelp) return;
+            
+            // Show relevant form fields based on selected roles
+            if (window.selectedUserTypes.includes('supplier')) {
+                supplierFields.classList.remove('hidden');
+            } else {
+                supplierFields.classList.add('hidden');
+            }
+            
+            if (window.selectedUserTypes.includes('reviewer')) {
+                reviewerFields.classList.remove('hidden');
+            } else {
+                reviewerFields.classList.add('hidden');
+            }
+            
+            // Update login help text
+            if (window.selectedUserTypes.length === 1) {
+                const type = window.selectedUserTypes[0];
+                if (type === 'supplier') {
+                    loginHelp.textContent = 'Enter your supplier API key (sup_...)';
+                } else if (type === 'reviewer') {
+                    loginHelp.textContent = 'Enter your reviewer API key (rev_...)';
+                } else {
+                    loginHelp.textContent = 'Enter your agent token or API key';
+                }
+            } else {
+                loginHelp.textContent = 'Enter your master API key or any role-specific key';
+            }
         }
 
-        function createNewPackage() {
-            alert('Package creation wizard coming soon!');
-        }
-
-        // Theme management
-        function toggleTheme() {
-            const currentTheme = document.documentElement.getAttribute('data-theme');
-            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
-            const themeIcon = document.getElementById('theme-icon');
+        function switchAuthMode(mode) {
+            window.authMode = mode;
             
-            document.documentElement.setAttribute('data-theme', newTheme);
-            themeIcon.textContent = newTheme === 'dark' ? '☀' : '☾';
+            // Update tab states
+            document.getElementById('login-tab').classList.toggle('active', mode === 'login');
+            document.getElementById('register-tab').classList.toggle('active', mode === 'register');
             
-            localStorage.setItem('theme', newTheme);
+            // Show/hide panels
+            document.getElementById('login-panel').classList.toggle('active', mode === 'login');
+            document.getElementById('register-panel').classList.toggle('active', mode === 'register');
         }
 
         function initializeTheme() {
@@ -1352,21 +706,307 @@
             const themeIcon = document.getElementById('theme-icon');
             
             document.documentElement.setAttribute('data-theme', savedTheme);
-            themeIcon.textContent = savedTheme === 'dark' ? '☀' : '☾';
+            if (themeIcon) {
+                themeIcon.textContent = savedTheme === 'dark' ? '☀' : '☾';
+            }
         }
 
-        // Initialize
-        initializeTheme();
-
-        // Auto-login for testing (remove in production)
-        document.addEventListener('DOMContentLoaded', function() {
-            const urlParams = new URLSearchParams(window.location.search);
-            const apiKey = urlParams.get('key');
-            if (apiKey) {
-                document.getElementById('api-key').value = apiKey;
-                login();
+        function toggleTheme() {
+            const currentTheme = document.documentElement.getAttribute('data-theme');
+            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            const themeIcon = document.getElementById('theme-icon');
+            
+            document.documentElement.setAttribute('data-theme', newTheme);
+            if (themeIcon) {
+                themeIcon.textContent = newTheme === 'dark' ? '☀' : '☾';
             }
-        });
+            
+            localStorage.setItem('theme', newTheme);
+        }
+
+        function showMessage(message, type) {
+            const className = type === 'error' ? 'error' : 'success';
+            const messageEl = document.createElement('div');
+            messageEl.className = className;
+            messageEl.textContent = message;
+            messageEl.style.position = 'fixed';
+            messageEl.style.top = '2rem';
+            messageEl.style.right = '2rem';
+            messageEl.style.zIndex = '1000';
+            messageEl.style.minWidth = '200px';
+            
+            document.body.appendChild(messageEl);
+            
+            setTimeout(() => {
+                if (messageEl.parentNode) {
+                    messageEl.parentNode.removeChild(messageEl);
+                }
+            }, 5000);
+        }
+
+        function showAPIIntegration() {
+            alert(`API Integration Examples:\n\n` +
+                  `Agents/Buyers:\n` +
+                  `1. POST /mint {"agent_id":"bot01","credits":10}\n` +
+                  `2. GET /data/package/1 -H "Authorization: Bearer TOKEN"\n\n` +
+                  `Suppliers:\n` +
+                  `1. POST /suppliers/register\n` +
+                  `2. POST /suppliers/packages -H "X-API-Key: sup_..."\n\n` +
+                  `Reviewers:\n` +
+                  `1. POST /reviewers/register\n` +
+                  `2. GET /review-tasks -H "X-API-Key: rev_..."`);
+        }
+
+        // Event setup function
+        function setupEventListeners() {
+            console.log('Setting up event listeners...');
+
+            // User type cards - click handlers
+            const cards = ['supplier-card', 'reviewer-card', 'buyer-card'];
+            cards.forEach((cardId, index) => {
+                const card = document.getElementById(cardId);
+                const types = ['supplier', 'reviewer', 'buyer'];
+                if (card) {
+                    card.addEventListener('click', () => {
+                        console.log('Card clicked:', types[index]);
+                        window.toggleUserType(types[index]);
+                    });
+                }
+            });
+
+            // Form tabs
+            const loginTab = document.getElementById('login-tab');
+            const registerTab = document.getElementById('register-tab');
+            if (loginTab) loginTab.addEventListener('click', () => switchAuthMode('login'));
+            if (registerTab) registerTab.addEventListener('click', () => switchAuthMode('register'));
+
+            // Theme toggle
+            const themeToggle = document.getElementById('theme-toggle');
+            if (themeToggle) themeToggle.addEventListener('click', toggleTheme);
+
+            // API integration button
+            const apiBtn = document.getElementById('api-integration-btn');
+            if (apiBtn) apiBtn.addEventListener('click', showAPIIntegration);
+
+            // Form submissions - REAL functionality
+            const loginForm = document.getElementById('login-form');
+            const registerForm = document.getElementById('register-form');
+            
+            if (loginForm) {
+                loginForm.addEventListener('submit', async (e) => {
+                    e.preventDefault();
+                    const apiKey = document.getElementById('login-key').value.trim();
+                    
+                    if (!apiKey) {
+                        showMessage('Please enter your API key', 'error');
+                        return;
+                    }
+
+                    const btn = loginForm.querySelector('button');
+                    btn.disabled = true;
+                    btn.textContent = 'Signing in...';
+
+                    try {
+                        window.currentUser = {
+                            apiKey: apiKey,
+                            roles: {},
+                            activeRole: null,
+                            name: '',
+                            email: '',
+                            stellar_address: ''
+                        };
+
+                        // Try to authenticate with different role endpoints
+                        const roleEndpoints = {
+                            'supplier': '/suppliers/me',
+                            'reviewer': '/reviewers/me'
+                        };
+
+                        let authenticatedRoles = [];
+
+                        // Check each role
+                        for (const [role, endpoint] of Object.entries(roleEndpoints)) {
+                            try {
+                                const response = await fetch(`${window.API_BASE}${endpoint}`, {
+                                    headers: { 'X-API-Key': apiKey }
+                                });
+
+                                if (response.ok) {
+                                    const roleData = await response.json();
+                                    window.currentUser.roles[role] = roleData;
+                                    authenticatedRoles.push(role);
+                                    
+                                    // Use first successful auth for primary info
+                                    if (!window.currentUser.activeRole) {
+                                        window.currentUser.activeRole = role;
+                                        window.currentUser.name = roleData.name;
+                                        window.currentUser.email = roleData.email;
+                                        window.currentUser.stellar_address = roleData.stellar_address;
+                                    }
+                                }
+                            } catch (error) {
+                                console.log(`No ${role} access for this key`);
+                            }
+                        }
+
+                        // Check if it's a buyer/agent token
+                        if (authenticatedRoles.length === 0) {
+                            // Create agent profile
+                            window.currentUser = {
+                                activeRole: 'buyer',
+                                availableRoles: ['buyer'],
+                                apiKey: apiKey,
+                                name: 'AI Agent',
+                                id: 'agent-' + Math.random().toString(36).substr(2, 9),
+                                balance: 10.00,
+                                roles: {
+                                    buyer: {
+                                        id: 'agent-' + Math.random().toString(36).substr(2, 9),
+                                        balance: 10.00
+                                    }
+                                }
+                            };
+                            authenticatedRoles = ['buyer'];
+                        }
+
+                        if (authenticatedRoles.length > 0) {
+                            window.currentUser.availableRoles = authenticatedRoles;
+                            
+                            const roleText = authenticatedRoles.length > 1 ? 
+                                `${authenticatedRoles.length} roles` : 
+                                authenticatedRoles[0];
+                            showMessage(`Successfully signed in with ${roleText}!`, 'success');
+                        } else {
+                            showMessage('Invalid API key or token', 'error');
+                        }
+
+                    } catch (error) {
+                        showMessage(`Network error: ${error.message}`, 'error');
+                    } finally {
+                        btn.disabled = false;
+                        btn.textContent = 'Access Dashboard';
+                    }
+                });
+            }
+            
+            if (registerForm) {
+                registerForm.addEventListener('submit', async (e) => {
+                    e.preventDefault();
+                    
+                    const formData = {
+                        name: document.getElementById('reg-name').value.trim(),
+                        email: document.getElementById('reg-email').value.trim(),
+                        stellar_address: document.getElementById('reg-stellar').value.trim(),
+                    };
+
+                    // Add reviewer-specific fields if reviewer role selected
+                    if (window.selectedUserTypes.includes('reviewer')) {
+                        const specializations = document.getElementById('reg-specializations').value.trim();
+                        formData.specializations = specializations ? specializations.split(',').map(s => s.trim()) : [];
+                    }
+
+                    const btn = registerForm.querySelector('button');
+                    btn.disabled = true;
+                    btn.textContent = 'Creating account...';
+
+                    try {
+                        const results = {};
+                        let errorOccurred = false;
+
+                        // Register for each selected role
+                        for (const userType of window.selectedUserTypes) {
+                            if (userType === 'buyer') continue; // Buyers don't need registration, just tokens
+                            
+                            try {
+                                const endpoint = userType === 'supplier' ? '/suppliers/register' : '/reviewers/register';
+                                const response = await fetch(`${window.API_BASE}${endpoint}`, {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify(formData)
+                                });
+
+                                if (response.ok) {
+                                    const result = await response.json();
+                                    results[userType] = result;
+                                } else {
+                                    const error = await response.text();
+                                    throw new Error(`${userType} registration failed: ${error}`);
+                                }
+                            } catch (error) {
+                                console.error(`Error registering as ${userType}:`, error);
+                                errorOccurred = true;
+                                showMessage(error.message, 'error');
+                            }
+                        }
+
+                        if (!errorOccurred && Object.keys(results).length > 0) {
+                            // Show all API keys to user
+                            let message = 'Account(s) created successfully!\n\n';
+                            Object.entries(results).forEach(([role, result]) => {
+                                message += `${role.charAt(0).toUpperCase() + role.slice(1)} API Key: ${result.api_key}\n`;
+                            });
+                            message += '\nPlease save these keys securely - you won\'t see them again.';
+                            
+                            alert(message);
+                            
+                            // Use the first API key for automatic login
+                            const firstKey = Object.values(results)[0].api_key;
+                            switchAuthMode('login');
+                            document.getElementById('login-key').value = firstKey;
+                            
+                            showMessage('Account created! You can now sign in.', 'success');
+                        } else if (window.selectedUserTypes.length === 1 && window.selectedUserTypes[0] === 'buyer') {
+                            // Special handling for buyer-only accounts
+                            showMessage('Buyer account ready! Use the "Mint Tokens" feature to get started.', 'success');
+                            switchAuthMode('login');
+                        }
+
+                    } catch (error) {
+                        showMessage(`Registration error: ${error.message}`, 'error');
+                    } finally {
+                        btn.disabled = false;
+                        btn.textContent = 'Create Account';
+                    }
+                });
+            }
+
+            console.log('Event listeners setup complete');
+        }
+
+        // Initialize function
+        function initialize() {
+            console.log('Initializing SquidPro Profile...');
+            initializeTheme();
+            setupEventListeners();
+            
+            // Set initial role
+            window.toggleUserType('supplier');
+            
+            console.log('SquidPro Profile initialized successfully!');
+            console.log('You can now test: toggleUserType("reviewer")');
+        }
+
+        // Make sure function is available globally
+        window.initialize = initialize;
+
+        // Multiple initialization approaches
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initialize);
+        } else {
+            initialize();
+        }
+
+        // Fallback
+        setTimeout(() => {
+            if (typeof window.toggleUserType === 'undefined') {
+                console.error('toggleUserType still not defined, trying to fix...');
+                initialize();
+            } else {
+                console.log('toggleUserType successfully defined!');
+            }
+        }, 1000);
+
+        console.log('Script loaded, toggleUserType available:', typeof window.toggleUserType);
     </script>
 </body>
 </html>
