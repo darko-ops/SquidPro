@@ -16,6 +16,12 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 import os
 
+import hashlib
+from datetime import datetime
+from fastapi import File, UploadFile, Form
+import pandas as pd
+from io import StringIO
+
 logging.basicConfig(level=logging.INFO)
 
 SECRET = os.getenv("SQUIDPRO_SECRET", "supersecret_change_me")
@@ -44,6 +50,20 @@ except Exception as e:
 
 # Database connection pool
 db_pool = None
+
+# Create uploads directory
+UPLOAD_DIR = "uploads"
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+class DatasetUpload(BaseModel):
+    name: str
+    description: str
+    category: str
+    price_per_query: float = 0.005
+    tags: List[str] = []
+    data_format: str  # 'json', 'csv', 'parquet'
+    update_frequency: str = 'static'  # 'static', 'daily', 'weekly'
+    sample_size: int = 10  # how many rows to show as sample
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -1473,3 +1493,383 @@ async def get_unified_profile(x_api_key: Optional[str] = Header(None)):
                 }
         
         raise HTTPException(status_code=401, detail="Invalid API key")
+
+
+@api.post("/suppliers/upload")
+async def upload_dataset(
+    file: UploadFile = File(...),
+    name: str = Form(...),
+    description: str = Form(""),
+    category: str = Form("financial"),
+    price_per_query: float = Form(0.005),
+    tags: str = Form(""),
+    x_api_key: Optional[str] = Header(None)
+):
+    """Upload a dataset file and create a new data package"""
+    supplier = await authenticate_supplier(x_api_key)
+    
+    # Validate file type
+    if not file.filename.endswith('.csv'):
+        raise HTTPException(status_code=400, detail="Only CSV files supported for now")
+    
+    # Read file content
+    content = await file.read()
+    if len(content) > 10 * 1024 * 1024:  # 10MB limit
+        raise HTTPException(status_code=400, detail="File too large. Maximum size: 10MB")
+    
+    # Generate unique filename
+    file_hash = hashlib.sha256(content).hexdigest()[:16]
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"{supplier['id']}_{timestamp}_{file_hash}.csv"
+    file_path = os.path.join(UPLOAD_DIR, filename)
+    
+    # Save file
+    with open(file_path, 'wb') as f:
+        f.write(content)
+    
+    # Analyze CSV
+    try:
+        df = pd.read_csv(file_path)
+        sample_data = df.head(3).to_dict(orient='records')
+        schema = {col: str(df[col].dtype) for col in df.columns}
+        row_count = len(df)
+        column_count = len(df.columns)
+    except Exception as e:
+        os.remove(file_path)  # Clean up on error
+        raise HTTPException(status_code=400, detail=f"Failed to analyze CSV: {str(e)}")
+    
+    async with db_pool.acquire() as conn:
+        # Create data package
+        tag_list = [tag.strip() for tag in tags.split(',')] if tags else []
+        tag_list.append('uploaded')
+        
+        package_id = await conn.fetchval("""
+            INSERT INTO data_packages (
+                supplier_id, name, description, category, 
+                endpoint_url, price_per_query, sample_data, 
+                tags, package_type
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            RETURNING id
+        """, supplier["id"], name, description, category,
+        f"/data/uploaded/{filename}", price_per_query, 
+        json.dumps(sample_data),  # JSON serialize
+        tag_list, 'upload')
+        
+        # Record upload details
+        await conn.execute("""
+            INSERT INTO uploaded_datasets (
+                supplier_id, package_id, filename, original_filename,
+                file_path, file_size, file_hash, data_format,
+                row_count, column_count, schema_info
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        """, supplier["id"], package_id, filename, file.filename,
+        file_path, len(content), file_hash, 'csv',
+        row_count, column_count, json.dumps(schema))  # JSON serialize
+        
+        return {
+            "package_id": package_id,
+            "filename": filename,
+            "status": "uploaded",
+            "message": f"Dataset '{name}' uploaded successfully",
+            "row_count": row_count,
+            "column_count": column_count
+        }
+
+
+@api.post("/suppliers/upload")
+async def upload_dataset(
+    file: UploadFile = File(...),
+    name: str = Form(...),
+    description: str = Form(""),
+    category: str = Form("financial"),
+    price_per_query: float = Form(0.005),
+    tags: str = Form(""),
+    x_api_key: Optional[str] = Header(None)
+):
+    """Upload dataset with automatic review task creation"""
+    supplier = await authenticate_supplier(x_api_key)
+    
+    if not file.filename.endswith('.csv'):
+        raise HTTPException(status_code=400, detail="Only CSV files supported for now")
+    
+    content = await file.read()
+    if len(content) > 10 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="File too large. Maximum size: 10MB")
+    
+    # Generate unique filename
+    file_hash = hashlib.sha256(content).hexdigest()[:16]
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"{supplier['id']}_{timestamp}_{file_hash}.csv"
+    file_path = os.path.join(UPLOAD_DIR, filename)
+    
+    # Save file
+    with open(file_path, 'wb') as f:
+        f.write(content)
+    
+    # Analyze CSV
+    try:
+        df = pd.read_csv(file_path)
+        sample_data = df.head(3).to_dict(orient='records')
+        schema = {col: str(df[col].dtype) for col in df.columns}
+        row_count = len(df)
+        column_count = len(df.columns)
+    except Exception as e:
+        os.remove(file_path)
+        raise HTTPException(status_code=400, detail=f"Failed to analyze CSV: {str(e)}")
+    
+    async with db_pool.acquire() as conn:
+        # Create data package (immediately available)
+        tag_list = [tag.strip() for tag in tags.split(',')] if tags else []
+        tag_list.extend(['uploaded', 'unreviewed'])  # Mark as unreviewed
+        
+        package_id = await conn.fetchval("""
+            INSERT INTO data_packages (
+                supplier_id, name, description, category, 
+                endpoint_url, price_per_query, sample_data, 
+                tags, package_type
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            RETURNING id
+        """, supplier["id"], name, description, category,
+        f"/data/uploaded/{filename}", price_per_query, 
+        json.dumps(sample_data), tag_list, 'upload')
+        
+        # Record upload details
+        await conn.execute("""
+            INSERT INTO uploaded_datasets (
+                supplier_id, package_id, filename, original_filename,
+                file_path, file_size, file_hash, data_format,
+                row_count, column_count, schema_info
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        """, supplier["id"], package_id, filename, file.filename,
+        file_path, len(content), file_hash, 'csv',
+        row_count, column_count, json.dumps(schema))
+        
+        # Create initial quality score entry (unreviewed)
+        await conn.execute("""
+            INSERT INTO package_quality_scores (package_id)
+            VALUES ($1)
+        """, package_id)
+        
+        # Auto-create review tasks for new upload
+        accuracy_task = await conn.fetchval("""
+            INSERT INTO review_tasks (
+                package_id, task_type, required_reviews, reward_pool_usd, 
+                reference_query, created_by
+            ) VALUES ($1, 'accuracy', 2, 0.05, $2, 'auto_upload')
+            RETURNING id
+        """, package_id, json.dumps({
+            "endpoint": f"/data/uploaded/{filename}",
+            "task_type": "accuracy",
+            "package_category": category,
+            "data_type": "uploaded_csv"
+        }))
+        
+        schema_task = await conn.fetchval("""
+            INSERT INTO review_tasks (
+                package_id, task_type, required_reviews, reward_pool_usd, 
+                reference_query, created_by
+            ) VALUES ($1, 'schema', 2, 0.03, $2, 'auto_upload')
+            RETURNING id
+        """, package_id, json.dumps({
+            "endpoint": f"/data/uploaded/{filename}",
+            "task_type": "schema",
+            "expected_columns": list(df.columns),
+            "expected_row_count": row_count
+        }))
+        
+        return {
+            "package_id": package_id,
+            "filename": filename,
+            "status": "uploaded",
+            "review_status": "pending_review",
+            "message": f"Dataset '{name}' uploaded and available for purchase. Review tasks created.",
+            "row_count": row_count,
+            "column_count": column_count,
+            "review_tasks_created": [accuracy_task, schema_task],
+            "note": "Package is immediately available but marked as unreviewed"
+        }
+    
+
+@api.get("/packages")
+async def list_packages(category: Optional[str] = None, tag: Optional[str] = None):
+    """List all available data packages with review status"""
+    async with db_pool.acquire() as conn:
+        query = """
+            SELECT p.*, s.name as supplier_name,
+                   pqs.overall_rating, pqs.total_reviews,
+                   CASE 
+                     WHEN pqs.total_reviews = 0 THEN 'unreviewed'
+                     WHEN pqs.total_reviews < 3 THEN 'limited_reviews' 
+                     ELSE 'reviewed'
+                   END as review_status
+            FROM data_packages p
+            JOIN suppliers s ON p.supplier_id = s.id
+            LEFT JOIN package_quality_scores pqs ON p.id = pqs.package_id
+            WHERE p.status = 'active' AND s.status = 'active'
+        """
+        params = []
+        
+        if category:
+            query += " AND p.category = $1"
+            params.append(category)
+        
+        if tag:
+            query += f" AND ${'2' if category else '1'} = ANY(p.tags)"
+            params.append(tag)
+        
+        query += " ORDER BY p.created_at DESC"
+        
+        packages = await conn.fetch(query, *params)
+        
+        return [
+            {
+                "id": pkg["id"],
+                "name": pkg["name"],
+                "description": pkg["description"],
+                "category": pkg["category"],
+                "supplier": pkg["supplier_name"],
+                "price_per_query": float(pkg["price_per_query"]),
+                "sample_data": pkg["sample_data"],
+                "tags": pkg["tags"],
+                "rate_limit": pkg["rate_limit"],
+                "package_type": pkg.get("package_type", "api"),
+                "review_status": pkg["review_status"],
+                "quality_score": float(pkg["overall_rating"] or 0),
+                "total_reviews": pkg["total_reviews"] or 0
+            }
+            for pkg in packages
+        ]
+@api.get("/data/uploaded/{filename}")
+async def serve_uploaded_data(
+    filename: str,
+    limit: int = Query(100, le=1000),
+    offset: int = Query(0, ge=0),
+    Authorization: Optional[str] = Header(None)
+):
+    """Serve data from uploaded datasets"""
+    claims = _auth(Authorization)
+    if claims.get("scope") != "data.read.price":
+        raise HTTPException(status_code=403, detail="Invalid scope")
+    
+    file_path = os.path.join(UPLOAD_DIR, filename)
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="Dataset not found")
+    
+    async with db_pool.acquire() as conn:
+        # Look up by filename instead of endpoint_url
+        package_info = await conn.fetchrow("""
+            SELECT dp.*, ud.supplier_id
+            FROM uploaded_datasets ud
+            JOIN data_packages dp ON ud.package_id = dp.id
+            WHERE ud.filename = $1
+        """, filename)
+        
+        if not package_info:
+            raise HTTPException(status_code=404, detail="Package not found in database")
+    
+    try:
+        df = pd.read_csv(file_path)
+        total_rows = len(df)
+        df_page = df.iloc[offset:offset+limit]
+        json_data = df_page.to_dict(orient='records')
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error reading dataset: {str(e)}")
+    
+    # Calculate payment splits
+    price = float(package_info["price_per_query"])
+    supplier_amt = round(price * SPLIT_SUPPLIER, 6)
+    reviewer_pool = round(price * SPLIT_REVIEWER, 6)
+    squidpro_amt = round(price * SPLIT_SQUIDPRO, 6)
+    
+    await update_balances(supplier_amt, reviewer_pool, squidpro_amt, str(package_info["supplier_id"]))
+    
+    receipt = {
+        "trace_id": claims["trace_id"],
+        "dataset_name": package_info["name"],
+        "filename": filename,
+        "total_rows": total_rows,
+        "returned_rows": len(json_data),
+        "data": json_data,
+        "cost": price,
+        "review_status": "unreviewed",
+        "quality_warning": "This dataset has not yet been peer-reviewed.",
+        "payout": {"supplier": supplier_amt, "reviewer_pool": reviewer_pool, "squidpro": squidpro_amt}
+    }
+    
+    return JSONResponse(receipt)
+
+
+@api.get("/suppliers/uploads")
+async def list_uploads(x_api_key: Optional[str] = Header(None)):
+    """List supplier's uploaded datasets"""
+    supplier = await authenticate_supplier(x_api_key)
+    
+    async with db_pool.acquire() as conn:
+        uploads = await conn.fetch("""
+            SELECT ud.*, dp.name as package_name
+            FROM uploaded_datasets ud
+            JOIN data_packages dp ON ud.package_id = dp.id
+            WHERE ud.supplier_id = $1
+            ORDER BY ud.upload_date DESC
+        """, supplier["id"])
+        
+        return [
+            {
+                "package_id": upload["package_id"],
+                "package_name": upload["package_name"],
+                "filename": upload["filename"],
+                "original_filename": upload["original_filename"],
+                "file_size": upload["file_size"],
+                "row_count": upload["row_count"],
+                "upload_date": upload["upload_date"].isoformat()
+            }
+            for upload in uploads
+        ]
+    
+
+@api.get("/data/uploaded/{filename}")
+async def serve_uploaded_data(
+    filename: str,
+    limit: int = Query(100, le=1000),
+    offset: int = Query(0, ge=0),
+    Authorization: Optional[str] = Header(None)
+):
+    """Serve data from uploaded datasets"""
+    claims = _auth(Authorization)
+    if claims.get("scope") != "data.read.price":
+        raise HTTPException(status_code=403, detail="Invalid scope")
+    
+    file_path = os.path.join(UPLOAD_DIR, filename)
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="Dataset not found")
+    
+    # Read the CSV file
+    try:
+        df = pd.read_csv(file_path)
+        total_rows = len(df)
+        df_page = df.iloc[offset:offset+limit]
+        json_data = df_page.to_dict(orient='records')
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error reading dataset: {str(e)}")
+    
+    # Use default pricing and supplier ID
+    price = 0.005
+    supplier_amt = round(price * SPLIT_SUPPLIER, 6)
+    reviewer_pool = round(price * SPLIT_REVIEWER, 6)
+    squidpro_amt = round(price * SPLIT_SQUIDPRO, 6)
+    
+    await update_balances(supplier_amt, reviewer_pool, squidpro_amt, "1")
+    
+    receipt = {
+        "trace_id": claims["trace_id"],
+        "filename": filename,
+        "total_rows": total_rows,
+        "returned_rows": len(json_data),
+        "data": json_data,
+        "cost": price,
+        "review_status": "unreviewed",
+        "quality_warning": "This dataset has not yet been peer-reviewed.",
+        "payout": {"supplier": supplier_amt, "reviewer_pool": reviewer_pool, "squidpro": squidpro_amt}
+    }
+    
+    return JSONResponse(receipt)    

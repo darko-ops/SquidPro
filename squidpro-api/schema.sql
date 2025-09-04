@@ -32,7 +32,7 @@ CREATE TABLE user_balance (
     supplier_earnings DECIMAL(10,6) DEFAULT 0,
     reviewer_earnings DECIMAL(10,6) DEFAULT 0,
     agent_credits DECIMAL(10,6) DEFAULT 0
-);
+    );
 
 -- Data packages/products
 CREATE TABLE data_packages (
@@ -221,3 +221,25 @@ INSERT INTO balances (user_type, user_id, payout_threshold_usd) VALUES
 ('reviewer', 'demo_reviewer_pool', 0.01);
 
 
+-- Add to schema.sql
+CREATE TABLE uploaded_datasets (
+    id SERIAL PRIMARY KEY,
+    supplier_id INTEGER REFERENCES suppliers(id),
+    package_id INTEGER REFERENCES data_packages(id),
+    filename VARCHAR(255) NOT NULL,
+    original_filename VARCHAR(255) NOT NULL,
+    file_path TEXT NOT NULL,
+    file_size INTEGER,
+    file_hash VARCHAR(64),
+    data_format VARCHAR(20), -- 'json', 'csv', 'parquet'
+    row_count INTEGER,
+    column_count INTEGER,
+    schema_info JSONB,
+    upload_date TIMESTAMP DEFAULT NOW(),
+    last_accessed TIMESTAMP,
+    access_count INTEGER DEFAULT 0
+);
+
+-- Add package_type to data_packages
+ALTER TABLE data_packages ADD COLUMN package_type VARCHAR(20) DEFAULT 'api';
+-- 'api' for external endpoints, 'upload' for uploaded datasets
