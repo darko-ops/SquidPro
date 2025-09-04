@@ -219,3 +219,5 @@ INSERT INTO balances (user_type, user_id, payout_threshold_usd) VALUES
 ('supplier', '1', 0.02),  -- supplier ID instead of name
 ('supplier', '2', 0.02),
 ('reviewer', 'demo_reviewer_pool', 0.01);
+
+
