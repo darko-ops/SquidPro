@@ -5,6 +5,7 @@ services:
     volumes:
       - ./squidpro-api/app.py:/app/app.py
       - ./squidpro-api/public:/app/public
+      - ./uploads:/app/uploads  
     environment:
     - SQUIDPRO_SECRET=supersecret_change_me
     - PRICE_PER_QUERY_USD=0.005
