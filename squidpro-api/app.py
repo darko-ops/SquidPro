@@ -1,27 +1,26 @@
 import os, time, uuid, jwt, httpx, asyncpg, json
-from fastapi import FastAPI, Header, HTTPException, Query
-from fastapi.responses import JSONResponse
-from pydantic import BaseModel
-from typing import Optional, List, Dict, Any
+import hashlib, re, asyncio, logging, secrets, statistics
+from datetime import datetime
+from enum import Enum
+from decimal import Decimal
+from io import StringIO
 from contextlib import asynccontextmanager
-import asyncio
-import logging
-import secrets
+from typing import Optional, List, Dict, Any, Tuple
+
+from fastapi import FastAPI, Header, HTTPException, Query, File, UploadFile, Form
+from fastapi.responses import JSONResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
-import statistics
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
+
 from stellar_sdk import Keypair, Network, Server, TransactionBuilder, Asset
 from stellar_sdk.exceptions import SdkError
-from decimal import Decimal
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
-import os
 
-import hashlib
-from datetime import datetime
-from fastapi import File, UploadFile, Form
 import pandas as pd
-from io import StringIO
 
+# Create uploads directory
+UPLOAD_DIR = "uploads"
+os.makedirs(UPLOAD_DIR, exist_ok=True)
 logging.basicConfig(level=logging.INFO)
 
 SECRET = os.getenv("SQUIDPRO_SECRET", "supersecret_change_me")
@@ -51,9 +50,60 @@ except Exception as e:
 # Database connection pool
 db_pool = None
 
-# Create uploads directory
-UPLOAD_DIR = "uploads"
-os.makedirs(UPLOAD_DIR, exist_ok=True)
+# PII Detection Enums
+class PIIType(Enum):
+    EMAIL = "email"
+    PHONE = "phone"
+    SSN = "ssn"
+    CREDIT_CARD = "credit_card"
+    IP_ADDRESS = "ip_address"
+    USERNAME = "username"
+    PASSWORD = "password"
+
+class PIIAction(Enum):
+    BLOCK = "block"
+    REDACT = "redact"
+    MASK = "mask"
+    LOG_ONLY = "log_only"
+
+# PII Detection Patterns
+PII_PATTERNS = {
+    PIIType.EMAIL: {
+        'pattern': r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b',
+        'description': 'Email addresses',
+        'action': PIIAction.BLOCK
+    },
+    PIIType.PHONE: {
+        'pattern': r'(\+?1[-.\s]?)?\(?([0-9]{3})\)?[-.\s]?([0-9]{3})[-.\s]?([0-9]{4})',
+        'description': 'Phone numbers',
+        'action': PIIAction.MASK
+    },
+    PIIType.SSN: {
+        'pattern': r'\b\d{3}-?\d{2}-?\d{4}\b',
+        'description': 'Social Security Numbers',
+        'action': PIIAction.BLOCK
+    },
+    PIIType.CREDIT_CARD: {
+        'pattern': r'\b(?:4[0-9]{12}(?:[0-9]{3})?|5[1-5][0-9]{14}|3[47][0-9]{13}|3[0-9]{13}|6(?:011|5[0-9]{2})[0-9]{12})\b',
+        'description': 'Credit card numbers',
+        'action': PIIAction.BLOCK
+    },
+    PIIType.IP_ADDRESS: {
+        'pattern': r'\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b',
+        'description': 'IP addresses',
+        'action': PIIAction.LOG_ONLY
+    },
+    PIIType.USERNAME: {
+        'pattern': r'\b(?:user|username|login|account)[:=]\s*([A-Za-z0-9_.-]+)\b',
+        'description': 'Username/login credentials',
+        'action': PIIAction.REDACT
+    },
+    PIIType.PASSWORD: {
+        'pattern': r'\b(?:pass|password|pwd)[:=]\s*([^\s,;|]+)\b',
+        'description': 'Passwords',
+        'action': PIIAction.BLOCK
+    }
+}
 
 class DatasetUpload(BaseModel):
     name: str
@@ -61,13 +111,24 @@ class DatasetUpload(BaseModel):
     category: str
     price_per_query: float = 0.005
     tags: List[str] = []
-    data_format: str  # 'json', 'csv', 'parquet'
-    update_frequency: str = 'static'  # 'static', 'daily', 'weekly'
-    sample_size: int = 10  # how many rows to show as sample
+    data_format: str
+    update_frequency: str = 'static'
+    sample_size: int = 10
+
+async def log_pii_detection(conn, supplier_id: int, filename: str, analysis: Dict):
+    """Log PII detection results to database"""
+    for pii_type, count in analysis['findings_by_type'].items():
+        action = 'block' if analysis['blocking_issues'] else 'allow'
+        blocked = len(analysis['blocking_issues']) > 0
+        
+        await conn.execute("""
+            INSERT INTO pii_detection_log 
+            (supplier_id, filename, pii_type, action_taken, findings_count, blocked, detection_details)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
+        """, supplier_id, filename, pii_type, action, count, blocked, json.dumps(analysis))
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup with retry logic
     global db_pool
     max_retries = 10
     retry_delay = 2
@@ -88,7 +149,6 @@ async def lifespan(app: FastAPI):
     
     yield
     
-    # Shutdown
     if db_pool:
         await db_pool.close()
 
@@ -102,8 +162,10 @@ api.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 if os.path.exists("public"):
     api.mount("/static", StaticFiles(directory="public"), name="static")
+
 # Pydantic Models
 class MintReq(BaseModel):
     agent_id: str
@@ -140,7 +202,129 @@ class DataPackage(BaseModel):
     rate_limit: int = 1000
     tags: List[str] = []
 
-
+class PIIDetector:
+    def __init__(self, config: Optional[Dict] = None):
+        self.config = config or PII_PATTERNS
+        self.detection_log = []
+    
+    def scan_text(self, text: str, context: str = "") -> List[Dict]:
+        """Scan text for PII patterns"""
+        findings = []
+        
+        for pii_type, pattern_config in self.config.items():
+            pattern = pattern_config['pattern']
+            matches = re.finditer(pattern, str(text), re.IGNORECASE)
+            
+            for match in matches:
+                finding = {
+                    'type': pii_type.value,
+                    'pattern': pattern_config['description'],
+                    'action': pattern_config['action'].value,
+                    'match': match.group(),
+                    'position': match.span(),
+                    'context': context,
+                    'confidence': self._calculate_confidence(pii_type, match.group())
+                }
+                findings.append(finding)
+        
+        return findings
+    
+    def scan_dataframe(self, df: pd.DataFrame) -> Dict:
+        """Scan entire dataframe for PII"""
+        all_findings = []
+        
+        for column in df.columns:
+            for idx, value in df[column].items():
+                if pd.notna(value):
+                    findings = self.scan_text(str(value), f"Column: {column}, Row: {idx}")
+                    all_findings.extend(findings)
+        
+        analysis = {
+            'total_findings': len(all_findings),
+            'findings_by_type': {},
+            'findings_by_action': {},
+            'blocking_issues': [],
+            'all_findings': all_findings
+        }
+        
+        for finding in all_findings:
+            pii_type = finding['type']
+            action = finding['action']
+            
+            if pii_type not in analysis['findings_by_type']:
+                analysis['findings_by_type'][pii_type] = 0
+            analysis['findings_by_type'][pii_type] += 1
+            
+            if action not in analysis['findings_by_action']:
+                analysis['findings_by_action'][action] = 0
+            analysis['findings_by_action'][action] += 1
+            
+            if action == PIIAction.BLOCK.value:
+                analysis['blocking_issues'].append(finding)
+        
+        return analysis
+    
+    def clean_dataframe(self, df: pd.DataFrame, analysis: Dict) -> Tuple[pd.DataFrame, Dict]:
+        """Clean dataframe based on PII findings"""
+        cleaned_df = df.copy()
+        cleaning_log = []
+        
+        for finding in analysis['all_findings']:
+            action = finding['action']
+            
+            if action == PIIAction.REDACT.value:
+                column, row = self._parse_context(finding['context'])
+                if column and row is not None:
+                    original_value = str(cleaned_df.loc[row, column])
+                    cleaned_value = re.sub(re.escape(finding['match']), '[REDACTED]', original_value)
+                    cleaned_df.loc[row, column] = cleaned_value
+                    cleaning_log.append(f"Redacted {finding['type']} in {column}, row {row}")
+            
+            elif action == PIIAction.MASK.value:
+                column, row = self._parse_context(finding['context'])
+                if column and row is not None:
+                    original_value = str(cleaned_df.loc[row, column])
+                    masked_value = self._mask_value(finding['match'], finding['type'])
+                    cleaned_value = original_value.replace(finding['match'], masked_value)
+                    cleaned_df.loc[row, column] = cleaned_value
+                    cleaning_log.append(f"Masked {finding['type']} in {column}, row {row}")
+        
+        return cleaned_df, {'actions_taken': cleaning_log}
+    
+    def _calculate_confidence(self, pii_type: PIIType, match: str) -> float:
+        """Calculate confidence score for PII detection"""
+        if pii_type == PIIType.EMAIL:
+            return 0.95 if '@' in match and '.' in match else 0.7
+        elif pii_type == PIIType.SSN:
+            return 0.9 if '-' in match else 0.8
+        elif pii_type == PIIType.PHONE:
+            return 0.85 if len(re.sub(r'[^\d]', '', match)) == 10 else 0.7
+        else:
+            return 0.8
+    
+    def _parse_context(self, context: str) -> Tuple[Optional[str], Optional[int]]:
+        """Parse context string to extract column and row"""
+        try:
+            parts = context.split(', ')
+            column = parts[0].replace('Column: ', '') if len(parts) > 0 else None
+            row = int(parts[1].replace('Row: ', '')) if len(parts) > 1 else None
+            return column, row
+        except:
+            return None, None
+    
+    def _mask_value(self, value: str, pii_type: str) -> str:
+        """Apply masking to PII values"""
+        if pii_type == 'phone':
+            digits = re.sub(r'[^\d]', '', value)
+            if len(digits) == 10:
+                return f"({digits[:3]}) ***-{digits[-4:]}"
+        elif pii_type == 'ssn':
+            digits = re.sub(r'[^\d]', '', value)
+            if len(digits) == 9:
+                return f"***-**-{digits[-4:]}"
+        
+        return '*' * (len(value) - 4) + value[-4:] if len(value) > 4 else '****'
+    
 @api.get("/")
 async def serve_catalog():
     """Serve the data catalog as the main page"""
@@ -838,6 +1022,163 @@ async def authenticate_supplier(api_key: str):
         
         return supplier
 
+
+# Enhanced upload endpoint with PII filtering
+@api.post("/suppliers/upload")
+async def upload_dataset_with_pii_filter(
+    file: UploadFile = File(...),
+    name: str = Form(...),
+    description: str = Form(""),
+    category: str = Form("financial"),
+    price_per_query: float = Form(0.005),
+    tags: str = Form(""),
+    pii_policy: str = Form("strict"),  # strict, moderate, permissive
+    x_api_key: Optional[str] = Header(None)
+):
+    """Upload dataset with automated PII filtering"""
+    supplier = await authenticate_supplier(x_api_key)
+    
+    if not file.filename.endswith('.csv'):
+        raise HTTPException(status_code=400, detail="Only CSV files supported")
+    
+    content = await file.read()
+    if len(content) > 10 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="File too large (max 10MB)")
+    
+    # Generate unique filename
+    file_hash = hashlib.sha256(content).hexdigest()[:16]
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"{supplier['id']}_{timestamp}_{file_hash}.csv"
+    file_path = os.path.join(UPLOAD_DIR, filename)
+    
+    # Save temporary file for analysis
+    temp_path = file_path + ".temp"
+    with open(temp_path, 'wb') as f:
+        f.write(content)
+    
+    # PII Detection and Analysis
+    try:
+        df = pd.read_csv(temp_path)
+        detector = PIIDetector()
+        analysis = detector.scan_dataframe(df)
+        
+        async with db_pool.acquire() as conn:
+            # Log PII detection
+            await log_pii_detection(conn, supplier["id"], filename, analysis)
+            
+            # Check if upload should be blocked
+            if analysis['blocking_issues']:
+                os.remove(temp_path)
+                
+                blocking_summary = {}
+                for issue in analysis['blocking_issues']:
+                    pii_type = issue['type']
+                    if pii_type not in blocking_summary:
+                        blocking_summary[pii_type] = 0
+                    blocking_summary[pii_type] += 1
+                
+                raise HTTPException(
+                    status_code=400,
+                    detail={
+                        "error": "PII_DETECTED",
+                        "message": "Upload blocked due to sensitive data detection",
+                        "pii_found": blocking_summary,
+                        "findings_count": analysis['total_findings'],
+                        "recommendation": "Please remove or anonymize sensitive data before uploading"
+                    }
+                )
+            
+            # Clean the data if needed
+            cleaned_df, cleaning_log = detector.clean_dataframe(df, analysis)
+            
+            # Save the cleaned file
+            cleaned_df.to_csv(file_path, index=False)
+            os.remove(temp_path)
+            
+            # Continue with normal upload process
+            sample_data = cleaned_df.head(3).to_dict(orient='records')
+            schema = {col: str(cleaned_df[col].dtype) for col in cleaned_df.columns}
+            row_count = len(cleaned_df)
+            column_count = len(cleaned_df.columns)
+            
+            tag_list = [tag.strip() for tag in tags.split(',')] if tags else []
+            tag_list.extend(['uploaded', 'pii-filtered'])
+            
+            package_id = await conn.fetchval("""
+                INSERT INTO data_packages (
+                    supplier_id, name, description, category, 
+                    endpoint_url, price_per_query, sample_data, 
+                    tags, package_type
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                RETURNING id
+            """, supplier["id"], name, description, category,
+            f"/data/uploaded/{filename}", price_per_query, 
+            json.dumps(sample_data), tag_list, 'upload')
+            
+            await conn.execute("""
+                INSERT INTO uploaded_datasets (
+                    supplier_id, package_id, filename, original_filename,
+                    file_path, file_size, file_hash, data_format,
+                    row_count, column_count, schema_info
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+            """, supplier["id"], package_id, filename, file.filename,
+            file_path, len(content), file_hash, 'csv',
+            row_count, column_count, json.dumps(schema))
+            
+            response = {
+                "package_id": package_id,
+                "filename": filename,
+                "status": "uploaded",
+                "row_count": row_count,
+                "column_count": column_count,
+                "message": f"Dataset '{name}' uploaded successfully",
+                "pii_analysis": {
+                    "scanned": True,
+                    "findings_total": analysis['total_findings'],
+                    "pii_types_found": list(analysis['findings_by_type'].keys()),
+                    "actions_taken": cleaning_log['actions_taken'] if cleaning_log['actions_taken'] else ["No PII cleaning needed"],
+                    "data_cleaned": len(cleaning_log['actions_taken']) > 0
+                }
+            }
+            
+            return response
+            
+    except pd.errors.ParserError as e:
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+        raise HTTPException(status_code=400, detail=f"Invalid CSV file: {str(e)}")
+    except Exception as e:
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+        raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
+
+# Admin endpoint to view PII detection logs
+@api.get("/admin/pii-logs")
+async def get_pii_logs(limit: int = 50):
+    """View PII detection logs"""
+    async with db_pool.acquire() as conn:
+        logs = await conn.fetch("""
+            SELECT pdl.*, s.name as supplier_name
+            FROM pii_detection_log pdl
+            JOIN suppliers s ON pdl.supplier_id = s.id
+            ORDER BY pdl.created_at DESC
+            LIMIT $1
+        """, limit)
+        
+        return [
+            {
+                "id": log["id"],
+                "supplier": log["supplier_name"],
+                "filename": log["filename"],
+                "pii_type": log["pii_type"],
+                "action": log["action_taken"],
+                "findings_count": log["findings_count"],
+                "blocked": log["blocked"],
+                "timestamp": log["created_at"].isoformat()
+            }
+            for log in logs
+        ]
+
 @api.get("/suppliers/me")
 async def get_supplier_info(x_api_key: Optional[str] = Header(None)):
     """Get supplier information"""
@@ -1495,85 +1836,7 @@ async def get_unified_profile(x_api_key: Optional[str] = Header(None)):
         raise HTTPException(status_code=401, detail="Invalid API key")
 
 
-@api.post("/suppliers/upload")
-async def upload_dataset(
-    file: UploadFile = File(...),
-    name: str = Form(...),
-    description: str = Form(""),
-    category: str = Form("financial"),
-    price_per_query: float = Form(0.005),
-    tags: str = Form(""),
-    x_api_key: Optional[str] = Header(None)
-):
-    """Upload a dataset file and create a new data package"""
-    supplier = await authenticate_supplier(x_api_key)
-    
-    # Validate file type
-    if not file.filename.endswith('.csv'):
-        raise HTTPException(status_code=400, detail="Only CSV files supported for now")
-    
-    # Read file content
-    content = await file.read()
-    if len(content) > 10 * 1024 * 1024:  # 10MB limit
-        raise HTTPException(status_code=400, detail="File too large. Maximum size: 10MB")
-    
-    # Generate unique filename
-    file_hash = hashlib.sha256(content).hexdigest()[:16]
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = f"{supplier['id']}_{timestamp}_{file_hash}.csv"
-    file_path = os.path.join(UPLOAD_DIR, filename)
-    
-    # Save file
-    with open(file_path, 'wb') as f:
-        f.write(content)
-    
-    # Analyze CSV
-    try:
-        df = pd.read_csv(file_path)
-        sample_data = df.head(3).to_dict(orient='records')
-        schema = {col: str(df[col].dtype) for col in df.columns}
-        row_count = len(df)
-        column_count = len(df.columns)
-    except Exception as e:
-        os.remove(file_path)  # Clean up on error
-        raise HTTPException(status_code=400, detail=f"Failed to analyze CSV: {str(e)}")
-    
-    async with db_pool.acquire() as conn:
-        # Create data package
-        tag_list = [tag.strip() for tag in tags.split(',')] if tags else []
-        tag_list.append('uploaded')
-        
-        package_id = await conn.fetchval("""
-            INSERT INTO data_packages (
-                supplier_id, name, description, category, 
-                endpoint_url, price_per_query, sample_data, 
-                tags, package_type
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-            RETURNING id
-        """, supplier["id"], name, description, category,
-        f"/data/uploaded/{filename}", price_per_query, 
-        json.dumps(sample_data),  # JSON serialize
-        tag_list, 'upload')
-        
-        # Record upload details
-        await conn.execute("""
-            INSERT INTO uploaded_datasets (
-                supplier_id, package_id, filename, original_filename,
-                file_path, file_size, file_hash, data_format,
-                row_count, column_count, schema_info
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-        """, supplier["id"], package_id, filename, file.filename,
-        file_path, len(content), file_hash, 'csv',
-        row_count, column_count, json.dumps(schema))  # JSON serialize
-        
-        return {
-            "package_id": package_id,
-            "filename": filename,
-            "status": "uploaded",
-            "message": f"Dataset '{name}' uploaded successfully",
-            "row_count": row_count,
-            "column_count": column_count
-        }
+
 
 
 @api.post("/suppliers/upload")
@@ -1690,55 +1953,97 @@ async def upload_dataset(
         }
     
 
-@api.get("/packages")
-async def list_packages(category: Optional[str] = None, tag: Optional[str] = None):
-    """List all available data packages with review status"""
+@api.post("/suppliers/upload")
+async def upload_dataset(
+    file: UploadFile = File(...),
+    name: str = Form(...),
+    description: str = Form(""),
+    category: str = Form("financial"),
+    price_per_query: float = Form(0.005),
+    tags: str = Form(""),
+    x_api_key: Optional[str] = Header(None)
+):
+    """Upload a dataset file and create a new data package"""
+    supplier = await authenticate_supplier(x_api_key)
+    
+    # Validate file type
+    if not file.filename.endswith('.csv'):
+        raise HTTPException(status_code=400, detail="Only CSV files supported")
+    
+    # Read and validate file size
+    content = await file.read()
+    if len(content) > 10 * 1024 * 1024:  # 10MB limit
+        raise HTTPException(status_code=400, detail="File too large (max 10MB)")
+    
+    # Generate unique filename
+    file_hash = hashlib.sha256(content).hexdigest()[:16]
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"{supplier['id']}_{timestamp}_{file_hash}.csv"
+    file_path = os.path.join(UPLOAD_DIR, filename)
+    
+    # Save file
+    try:
+        with open(file_path, 'wb') as f:
+            f.write(content)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to save file: {str(e)}")
+    
+    # Analyze CSV
+    try:
+        df = pd.read_csv(file_path)
+        sample_data = df.head(3).to_dict(orient='records')
+        schema = {col: str(df[col].dtype) for col in df.columns}
+        row_count = len(df)
+        column_count = len(df.columns)
+    except Exception as e:
+        os.remove(file_path)  # Clean up on error
+        raise HTTPException(status_code=400, detail=f"Invalid CSV file: {str(e)}")
+    
     async with db_pool.acquire() as conn:
-        query = """
-            SELECT p.*, s.name as supplier_name,
-                   pqs.overall_rating, pqs.total_reviews,
-                   CASE 
-                     WHEN pqs.total_reviews = 0 THEN 'unreviewed'
-                     WHEN pqs.total_reviews < 3 THEN 'limited_reviews' 
-                     ELSE 'reviewed'
-                   END as review_status
-            FROM data_packages p
-            JOIN suppliers s ON p.supplier_id = s.id
-            LEFT JOIN package_quality_scores pqs ON p.id = pqs.package_id
-            WHERE p.status = 'active' AND s.status = 'active'
-        """
-        params = []
-        
-        if category:
-            query += " AND p.category = $1"
-            params.append(category)
-        
-        if tag:
-            query += f" AND ${'2' if category else '1'} = ANY(p.tags)"
-            params.append(tag)
-        
-        query += " ORDER BY p.created_at DESC"
-        
-        packages = await conn.fetch(query, *params)
-        
-        return [
-            {
-                "id": pkg["id"],
-                "name": pkg["name"],
-                "description": pkg["description"],
-                "category": pkg["category"],
-                "supplier": pkg["supplier_name"],
-                "price_per_query": float(pkg["price_per_query"]),
-                "sample_data": pkg["sample_data"],
-                "tags": pkg["tags"],
-                "rate_limit": pkg["rate_limit"],
-                "package_type": pkg.get("package_type", "api"),
-                "review_status": pkg["review_status"],
-                "quality_score": float(pkg["overall_rating"] or 0),
-                "total_reviews": pkg["total_reviews"] or 0
+        try:
+            # Create data package
+            tag_list = [tag.strip() for tag in tags.split(',')] if tags else []
+            tag_list.extend(['uploaded', 'csv'])
+            
+            package_id = await conn.fetchval("""
+                INSERT INTO data_packages (
+                    supplier_id, name, description, category, 
+                    endpoint_url, price_per_query, sample_data, 
+                    tags, package_type
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                RETURNING id
+            """, supplier["id"], name, description, category,
+            f"/data/uploaded/{filename}", price_per_query, 
+            json.dumps(sample_data), tag_list, 'upload')
+            
+            # Record upload details
+            await conn.execute("""
+                INSERT INTO uploaded_datasets (
+                    supplier_id, package_id, filename, original_filename,
+                    file_path, file_size, file_hash, data_format,
+                    row_count, column_count, schema_info
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+            """, supplier["id"], package_id, filename, file.filename,
+            file_path, len(content), file_hash, 'csv',
+            row_count, column_count, json.dumps(schema))
+            
+            return {
+                "package_id": package_id,
+                "filename": filename,
+                "status": "uploaded",
+                "row_count": row_count,
+                "column_count": column_count,
+                "message": f"Dataset '{name}' uploaded successfully"
             }
-            for pkg in packages
-        ]
+            
+        except Exception as e:
+            # Clean up file if database operation fails
+            if os.path.exists(file_path):
+                os.remove(file_path)
+            raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+
+# Fixed serve_uploaded_data function - replace the existing one in app.py
+
 @api.get("/data/uploaded/{filename}")
 async def serve_uploaded_data(
     filename: str,
@@ -1755,18 +2060,7 @@ async def serve_uploaded_data(
     if not os.path.exists(file_path):
         raise HTTPException(status_code=404, detail="Dataset not found")
     
-    async with db_pool.acquire() as conn:
-        # Look up by filename instead of endpoint_url
-        package_info = await conn.fetchrow("""
-            SELECT dp.*, ud.supplier_id
-            FROM uploaded_datasets ud
-            JOIN data_packages dp ON ud.package_id = dp.id
-            WHERE ud.filename = $1
-        """, filename)
-        
-        if not package_info:
-            raise HTTPException(status_code=404, detail="Package not found in database")
-    
+    # Read and serve CSV data
     try:
         df = pd.read_csv(file_path)
         total_rows = len(df)
@@ -1775,24 +2069,43 @@ async def serve_uploaded_data(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error reading dataset: {str(e)}")
     
-    # Calculate payment splits
-    price = float(package_info["price_per_query"])
-    supplier_amt = round(price * SPLIT_SUPPLIER, 6)
-    reviewer_pool = round(price * SPLIT_REVIEWER, 6)
-    squidpro_amt = round(price * SPLIT_SQUIDPRO, 6)
-    
-    await update_balances(supplier_amt, reviewer_pool, squidpro_amt, str(package_info["supplier_id"]))
+    # Get package info and update balances - keep connection open for all operations
+    async with db_pool.acquire() as conn:
+        upload_info = await conn.fetchrow("""
+            SELECT ud.*, dp.name as package_name, dp.price_per_query, dp.id as package_id
+            FROM uploaded_datasets ud
+            JOIN data_packages dp ON ud.package_id = dp.id
+            WHERE ud.filename = $1
+        """, filename)
+        
+        if not upload_info:
+            raise HTTPException(status_code=404, detail="Package not found in database")
+        
+        # Calculate payment splits
+        price = float(upload_info["price_per_query"])
+        supplier_amt = round(price * SPLIT_SUPPLIER, 6)
+        reviewer_pool = round(price * SPLIT_REVIEWER, 6)
+        squidpro_amt = round(price * SPLIT_SQUIDPRO, 6)
+        
+        # Update balances
+        await update_balances(supplier_amt, reviewer_pool, squidpro_amt, str(upload_info["supplier_id"]))
+        
+        # Log the query - this must happen within the same connection context
+        await conn.execute("""
+            INSERT INTO query_history (package_id, agent_id, response_size, cost, trace_id)
+            VALUES ($1, $2, $3, $4, $5)
+        """, upload_info["package_id"], claims["sub"], len(str(json_data)), price, claims["trace_id"])
     
     receipt = {
         "trace_id": claims["trace_id"],
-        "dataset_name": package_info["name"],
+        "package_name": upload_info["package_name"],
         "filename": filename,
         "total_rows": total_rows,
         "returned_rows": len(json_data),
+        "offset": offset,
+        "limit": limit,
         "data": json_data,
         "cost": price,
-        "review_status": "unreviewed",
-        "quality_warning": "This dataset has not yet been peer-reviewed.",
         "payout": {"supplier": supplier_amt, "reviewer_pool": reviewer_pool, "squidpro": squidpro_amt}
     }
     
@@ -1826,50 +2139,3 @@ async def list_uploads(x_api_key: Optional[str] = Header(None)):
             for upload in uploads
         ]
     
-
-@api.get("/data/uploaded/{filename}")
-async def serve_uploaded_data(
-    filename: str,
-    limit: int = Query(100, le=1000),
-    offset: int = Query(0, ge=0),
-    Authorization: Optional[str] = Header(None)
-):
-    """Serve data from uploaded datasets"""
-    claims = _auth(Authorization)
-    if claims.get("scope") != "data.read.price":
-        raise HTTPException(status_code=403, detail="Invalid scope")
-    
-    file_path = os.path.join(UPLOAD_DIR, filename)
-    if not os.path.exists(file_path):
-        raise HTTPException(status_code=404, detail="Dataset not found")
-    
-    # Read the CSV file
-    try:
-        df = pd.read_csv(file_path)
-        total_rows = len(df)
-        df_page = df.iloc[offset:offset+limit]
-        json_data = df_page.to_dict(orient='records')
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error reading dataset: {str(e)}")
-    
-    # Use default pricing and supplier ID
-    price = 0.005
-    supplier_amt = round(price * SPLIT_SUPPLIER, 6)
-    reviewer_pool = round(price * SPLIT_REVIEWER, 6)
-    squidpro_amt = round(price * SPLIT_SQUIDPRO, 6)
-    
-    await update_balances(supplier_amt, reviewer_pool, squidpro_amt, "1")
-    
-    receipt = {
-        "trace_id": claims["trace_id"],
-        "filename": filename,
-        "total_rows": total_rows,
-        "returned_rows": len(json_data),
-        "data": json_data,
-        "cost": price,
-        "review_status": "unreviewed",
-        "quality_warning": "This dataset has not yet been peer-reviewed.",
-        "payout": {"supplier": supplier_amt, "reviewer_pool": reviewer_pool, "squidpro": squidpro_amt}
-    }
-    
-    return JSONResponse(receipt)    
