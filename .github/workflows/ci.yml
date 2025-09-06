@@ -87,3 +87,4 @@ jobs:
         echo "Container logs before cleanup:"
         docker compose logs --tail=50
         docker compose down -v
+# Trigger new workflow
