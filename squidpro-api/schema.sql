@@ -1,38 +1,27 @@
--- New unified users table
-CREATE TABLE users (
+-- SquidPro Database Schema - Compatible with app.py
+-- This creates the tables that your app.py code expects
+
+-- Core user tables that app.py expects
+CREATE TABLE suppliers (
     id SERIAL PRIMARY KEY,
-    email VARCHAR(255) UNIQUE NOT NULL,
     name VARCHAR(255) NOT NULL,
+    email VARCHAR(255) UNIQUE,
     stellar_address VARCHAR(56),
-    master_api_key VARCHAR(64) UNIQUE, -- Single key for all roles
-    roles TEXT[] DEFAULT ARRAY['buyer'], -- ['buyer', 'supplier', 'reviewer']
+    api_key VARCHAR(64) UNIQUE,
+    status VARCHAR(20) DEFAULT 'active' CHECK (status IN ('active', 'inactive')),
     created_at TIMESTAMP DEFAULT NOW()
 );
 
--- Role-specific profiles
-CREATE TABLE user_supplier_profile (
-    user_id INTEGER REFERENCES users(id),
-    business_name VARCHAR(255),
-    verified BOOLEAN DEFAULT FALSE,
-    package_count INTEGER DEFAULT 0
-);
-
-CREATE TABLE user_reviewer_profile (
-    user_id INTEGER REFERENCES users(id), 
+CREATE TABLE reviewers (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    email VARCHAR(255),
+    stellar_address VARCHAR(56),
+    api_key VARCHAR(64) UNIQUE,
     reputation_level VARCHAR(20) DEFAULT 'novice',
     specializations TEXT[],
-    total_reviews INTEGER DEFAULT 0,
-    consensus_rate DECIMAL(3,2) DEFAULT 0
+    created_at TIMESTAMP DEFAULT NOW()
 );
-
--- Unified balance table
-CREATE TABLE user_balance (
-    user_id INTEGER REFERENCES users(id) UNIQUE,
-    total_balance_usd DECIMAL(10,6) DEFAULT 0,
-    supplier_earnings DECIMAL(10,6) DEFAULT 0,
-    reviewer_earnings DECIMAL(10,6) DEFAULT 0,
-    agent_credits DECIMAL(10,6) DEFAULT 0
-    );
 
 -- Data packages/products
 CREATE TABLE data_packages (
@@ -48,18 +37,9 @@ CREATE TABLE data_packages (
     rate_limit INTEGER DEFAULT 1000, -- queries per hour
     status VARCHAR(20) DEFAULT 'active' CHECK (status IN ('active', 'inactive', 'pending_review')),
     tags TEXT[], -- array of tags for searching
+    package_type VARCHAR(20) DEFAULT 'api',
     created_at TIMESTAMP DEFAULT NOW(),
     updated_at TIMESTAMP DEFAULT NOW()
-);
-
--- Package usage tracking
-CREATE TABLE package_usage (
-    id SERIAL PRIMARY KEY,
-    package_id INTEGER REFERENCES data_packages(id),
-    agent_id VARCHAR(255),
-    query_count INTEGER DEFAULT 0,
-    last_used TIMESTAMP DEFAULT NOW(),
-    total_spent DECIMAL(10,6) DEFAULT 0
 );
 
 -- Balance tracking
@@ -96,20 +76,18 @@ CREATE TABLE query_history (
     created_at TIMESTAMP DEFAULT NOW()
 );
 
--- Add these tables to your existing schema.sql
-
 -- Review tasks - automatically generated or manually created
 CREATE TABLE review_tasks (
     id SERIAL PRIMARY KEY,
     package_id INTEGER REFERENCES data_packages(id),
     task_type VARCHAR(50) CHECK (task_type IN ('accuracy', 'freshness', 'schema', 'consensus', 'spot_audit')),
     status VARCHAR(20) DEFAULT 'open' CHECK (status IN ('open', 'in_progress', 'completed', 'expired')),
-    required_reviews INTEGER DEFAULT 3, -- how many reviewers needed for consensus
-    reward_pool_usd DECIMAL(10,6) DEFAULT 0.05, -- total payout for this task
-    reference_query JSONB, -- the query to test (params, expected structure)
+    required_reviews INTEGER DEFAULT 3,
+    reward_pool_usd DECIMAL(10,6) DEFAULT 0.05,
+    reference_query JSONB,
     expires_at TIMESTAMP DEFAULT (NOW() + INTERVAL '24 hours'),
     created_at TIMESTAMP DEFAULT NOW(),
-    created_by VARCHAR(20) DEFAULT 'system' -- 'system' or 'manual'
+    created_by VARCHAR(20) DEFAULT 'system'
 );
 
 -- Individual review submissions
@@ -117,15 +95,15 @@ CREATE TABLE review_submissions (
     id SERIAL PRIMARY KEY,
     task_id INTEGER REFERENCES review_tasks(id),
     reviewer_id INTEGER REFERENCES reviewers(id),
-    quality_score INTEGER CHECK (quality_score BETWEEN 1 AND 10), -- 1=terrible, 10=perfect
+    quality_score INTEGER CHECK (quality_score BETWEEN 1 AND 10),
     timeliness_score INTEGER CHECK (timeliness_score BETWEEN 1 AND 10),
     schema_compliance_score INTEGER CHECK (schema_compliance_score BETWEEN 1 AND 10),
     overall_rating INTEGER CHECK (overall_rating BETWEEN 1 AND 10),
-    evidence JSONB, -- their test data, comparisons, notes
-    findings TEXT, -- written assessment
-    test_timestamp TIMESTAMP, -- when they ran their verification
+    evidence JSONB,
+    findings TEXT,
+    test_timestamp TIMESTAMP,
     submitted_at TIMESTAMP DEFAULT NOW(),
-    is_consensus BOOLEAN DEFAULT FALSE, -- true if this matches majority opinion
+    is_consensus BOOLEAN DEFAULT FALSE,
     payout_earned DECIMAL(10,6) DEFAULT 0
 );
 
@@ -139,7 +117,7 @@ CREATE TABLE package_quality_scores (
     overall_rating DECIMAL(3,2) DEFAULT 0,
     total_reviews INTEGER DEFAULT 0,
     last_reviewed TIMESTAMP,
-    quality_trend VARCHAR(20) DEFAULT 'stable', -- 'improving', 'declining', 'stable'
+    quality_trend VARCHAR(20) DEFAULT 'stable',
     updated_at TIMESTAMP DEFAULT NOW()
 );
 
@@ -148,47 +126,46 @@ CREATE TABLE reviewer_stats (
     id SERIAL PRIMARY KEY,
     reviewer_id INTEGER REFERENCES reviewers(id) UNIQUE,
     total_reviews INTEGER DEFAULT 0,
-    consensus_rate DECIMAL(3,2) DEFAULT 0, -- % of time they agree with majority
-    accuracy_score DECIMAL(3,2) DEFAULT 0, -- how often their assessments prove correct
+    consensus_rate DECIMAL(3,2) DEFAULT 0,
+    accuracy_score DECIMAL(3,2) DEFAULT 0,
     total_earned DECIMAL(10,6) DEFAULT 0,
     avg_review_time_minutes INTEGER DEFAULT 0,
-    specializations TEXT[], -- categories they're good at
-    reputation_level VARCHAR(20) DEFAULT 'novice', -- 'novice', 'experienced', 'expert', 'master'
+    specializations TEXT[],
+    reputation_level VARCHAR(20) DEFAULT 'novice',
     updated_at TIMESTAMP DEFAULT NOW()
 );
 
--- Reviewer disputes (when reviewers disagree significantly)
-CREATE TABLE review_disputes (
+-- Uploaded datasets
+CREATE TABLE uploaded_datasets (
     id SERIAL PRIMARY KEY,
-    task_id INTEGER REFERENCES review_tasks(id),
-    dispute_reason TEXT,
-    status VARCHAR(20) DEFAULT 'open' CHECK (status IN ('open', 'resolved', 'escalated')),
-    resolution_notes TEXT,
-    resolved_by VARCHAR(50),
-    created_at TIMESTAMP DEFAULT NOW(),
-    resolved_at TIMESTAMP
+    supplier_id INTEGER REFERENCES suppliers(id),
+    package_id INTEGER REFERENCES data_packages(id),
+    filename VARCHAR(255) NOT NULL,
+    original_filename VARCHAR(255) NOT NULL,
+    file_path TEXT NOT NULL,
+    file_size INTEGER,
+    file_hash VARCHAR(64),
+    data_format VARCHAR(20),
+    row_count INTEGER,
+    column_count INTEGER,
+    schema_info JSONB,
+    upload_date TIMESTAMP DEFAULT NOW(),
+    last_accessed TIMESTAMP,
+    access_count INTEGER DEFAULT 0
 );
 
--- Add reputation level to existing reviewers table
-ALTER TABLE reviewers ADD COLUMN IF NOT EXISTS reputation_level VARCHAR(20) DEFAULT 'novice';
-ALTER TABLE reviewers ADD COLUMN IF NOT EXISTS specializations TEXT[];
-ALTER TABLE reviewers ADD COLUMN IF NOT EXISTS api_key VARCHAR(64);
-
--- Insert some demo review tasks
-INSERT INTO review_tasks (package_id, task_type, reward_pool_usd, reference_query) VALUES 
-(1, 'accuracy', 0.05, '{"endpoint": "/price", "params": {"pair": "BTCUSDT"}, "expected_fields": ["price", "volume", "ts"]}'),
-(1, 'freshness', 0.03, '{"endpoint": "/price", "params": {"pair": "ETHUSDT"}, "max_age_seconds": 30}'),
-(1, 'schema', 0.02, '{"endpoint": "/price", "params": {"pair": "ADAUSDT"}, "schema_check": true}');
-
--- Initialize quality scores for existing packages
-INSERT INTO package_quality_scores (package_id) 
-SELECT id FROM data_packages ON CONFLICT (package_id) DO NOTHING;
-
--- Add index for performance
-CREATE INDEX idx_review_tasks_status ON review_tasks(status);
-CREATE INDEX idx_review_submissions_task ON review_submissions(task_id);
-CREATE INDEX idx_package_quality_package ON package_quality_scores(package_id);
-
+-- PII detection log
+CREATE TABLE pii_detection_log (
+    id SERIAL PRIMARY KEY,
+    supplier_id INTEGER REFERENCES suppliers(id),
+    filename VARCHAR(255),
+    pii_type VARCHAR(50),
+    action_taken VARCHAR(20),
+    findings_count INTEGER,
+    blocked BOOLEAN DEFAULT FALSE,
+    detection_details JSONB,
+    created_at TIMESTAMP DEFAULT NOW()
+);
 
 -- Insert demo suppliers and reviewers with Stellar addresses
 INSERT INTO suppliers (name, stellar_address, email, api_key) VALUES 
@@ -216,70 +193,15 @@ INSERT INTO data_packages (supplier_id, name, description, category, endpoint_ur
 -- Insert default balances with lower thresholds for demo
 INSERT INTO balances (user_type, user_id, payout_threshold_usd) VALUES 
 ('squidpro', 'treasury', 100.00),
-('supplier', '1', 0.02),  -- supplier ID instead of name
+('supplier', '1', 0.02),
 ('supplier', '2', 0.02),
 ('reviewer', 'demo_reviewer_pool', 0.01);
 
+-- Initialize quality scores for existing packages
+INSERT INTO package_quality_scores (package_id) 
+SELECT id FROM data_packages ON CONFLICT (package_id) DO NOTHING;
 
--- Add to schema.sql
-CREATE TABLE uploaded_datasets (
-    id SERIAL PRIMARY KEY,
-    supplier_id INTEGER REFERENCES suppliers(id),
-    package_id INTEGER REFERENCES data_packages(id),
-    filename VARCHAR(255) NOT NULL,
-    original_filename VARCHAR(255) NOT NULL,
-    file_path TEXT NOT NULL,
-    file_size INTEGER,
-    file_hash VARCHAR(64),
-    data_format VARCHAR(20), -- 'json', 'csv', 'parquet'
-    row_count INTEGER,
-    column_count INTEGER,
-    schema_info JSONB,
-    upload_date TIMESTAMP DEFAULT NOW(),
-    last_accessed TIMESTAMP,
-    access_count INTEGER DEFAULT 0
-);
-
--- Add package_type to data_packages
-ALTER TABLE data_packages ADD COLUMN package_type VARCHAR(20) DEFAULT 'api';
--- 'api' for external endpoints, 'upload' for uploaded datasets
--- Add missing tables that the app expects
-CREATE TABLE IF NOT EXISTS suppliers (
-    id SERIAL PRIMARY KEY,
-    name VARCHAR(255) NOT NULL,
-    email VARCHAR(255) UNIQUE,
-    stellar_address VARCHAR(56),
-    api_key VARCHAR(64) UNIQUE,
-    status VARCHAR(20) DEFAULT 'active',
-    created_at TIMESTAMP DEFAULT NOW()
-);
-
-CREATE TABLE IF NOT EXISTS reviewers (
-    id SERIAL PRIMARY KEY,
-    name VARCHAR(255) NOT NULL,
-    email VARCHAR(255),
-    stellar_address VARCHAR(56),
-    api_key VARCHAR(64) UNIQUE,
-    reputation_level VARCHAR(20) DEFAULT 'novice',
-    specializations TEXT[],
-    created_at TIMESTAMP DEFAULT NOW()
-);
-
-CREATE TABLE IF NOT EXISTS data_packages (
-    id SERIAL PRIMARY KEY,
-    supplier_id INTEGER REFERENCES suppliers(id),
-    name VARCHAR(255) NOT NULL,
-    description TEXT,
-    category VARCHAR(100),
-    endpoint_url TEXT NOT NULL,
-    price_per_query DECIMAL(10,6) DEFAULT 0.005,
-    sample_data JSONB,
-    schema_definition JSONB,
-    rate_limit INTEGER DEFAULT 1000,
-    status VARCHAR(20) DEFAULT 'active',
-    tags TEXT[],
-    package_type VARCHAR(20) DEFAULT 'api',
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW()
-);
-
+-- Add index for performance
+CREATE INDEX idx_review_tasks_status ON review_tasks(status);
+CREATE INDEX idx_review_submissions_task ON review_submissions(task_id);
+CREATE INDEX idx_package_quality_package ON package_quality_scores(package_id);
