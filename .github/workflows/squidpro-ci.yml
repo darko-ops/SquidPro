@@ -13,7 +13,7 @@ env:
   SUPPLIER_SPLIT: 0.7
   REVIEWER_SPLIT: 0.2
   SQUIDPRO_SPLIT: 0.1
-  DATABASE_URL: postgresql://squidpro:testpassword@localhost:5432/squidpro
+  DATABASE_URL: postgresql://squidpro:password@localhost:5432/squidpro
   STELLAR_SECRET_KEY: SDFF2WLXYOHAIA2NPOFJJXTJAU5DD6EBDWGTCFBQVGATEZJJWBTR23SH
   STELLAR_NETWORK: testnet
   USDC_ASSET_CODE: USDC
@@ -66,7 +66,7 @@ jobs:
         image: postgres:15
         env:
           POSTGRES_USER: squidpro
-          POSTGRES_PASSWORD: testpassword
+          POSTGRES_PASSWORD: password
           POSTGRES_DB: squidpro
         options: >-
           --health-cmd pg_isready
@@ -90,13 +90,16 @@ jobs:
 
       - name: Initialize database schema
         run: |
-          PGPASSWORD=testpassword psql -h localhost -U squidpro -d squidpro -f squidpro-api/schema.sql
+          PGPASSWORD=password psql -h localhost -U squidpro -d squidpro -f squidpro-api/schema.sql
           echo "✅ Database schema initialized"
 
       - name: Verify database structure
         run: |
-          PGPASSWORD=testpassword psql -h localhost -U squidpro -d squidpro -c "
+          PGPASSWORD=password psql -h localhost -U squidpro -d squidpro -c "
           SELECT COUNT(*) as table_count FROM information_schema.tables WHERE table_schema = 'public';
+          SELECT 'suppliers: ' || COUNT(*) FROM suppliers;
+          SELECT 'data_packages: ' || COUNT(*) FROM data_packages;
+          SELECT 'balances: ' || COUNT(*) FROM balances;
           "
           echo "✅ Database verification completed"
 
@@ -109,7 +112,7 @@ jobs:
         image: postgres:15
         env:
           POSTGRES_USER: squidpro
-          POSTGRES_PASSWORD: testpassword
+          POSTGRES_PASSWORD: password
           POSTGRES_DB: squidpro
         options: >-
           --health-cmd pg_isready
@@ -135,7 +138,7 @@ jobs:
 
       - name: Initialize database
         run: |
-          PGPASSWORD=testpassword psql -h localhost -U squidpro -d squidpro -f squidpro-api/schema.sql
+          PGPASSWORD=password psql -h localhost -U squidpro -d squidpro -f squidpro-api/schema.sql
           echo "✅ Database initialized"
 
       - name: Start collector-crypto service
@@ -143,6 +146,7 @@ jobs:
           cd collector-crypto
           nohup python app.py &
           sleep 5
+          curl -f http://localhost:8200/price || echo "Collector not ready yet"
           echo "✅ Collector crypto started"
         env:
           SEED: 42
@@ -165,6 +169,13 @@ jobs:
             echo "Waiting for SquidPro API... ($i/30)"
             sleep 2
           done
+
+      - name: Test service connectivity
+        run: |
+          echo "🔍 Testing service connectivity..."
+          curl -f http://localhost:8100/health || echo "❌ API health check failed"
+          curl -f http://localhost:8200/price || echo "❌ Collector health check failed"
+          curl -s http://localhost:8100/balances | head -2 || echo "❌ Database connectivity failed"
 
       - name: Run integration tests
         run: |
