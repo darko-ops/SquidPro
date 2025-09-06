@@ -243,3 +243,43 @@ CREATE TABLE uploaded_datasets (
 -- Add package_type to data_packages
 ALTER TABLE data_packages ADD COLUMN package_type VARCHAR(20) DEFAULT 'api';
 -- 'api' for external endpoints, 'upload' for uploaded datasets
+-- Add missing tables that the app expects
+CREATE TABLE IF NOT EXISTS suppliers (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    email VARCHAR(255) UNIQUE,
+    stellar_address VARCHAR(56),
+    api_key VARCHAR(64) UNIQUE,
+    status VARCHAR(20) DEFAULT 'active',
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS reviewers (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    email VARCHAR(255),
+    stellar_address VARCHAR(56),
+    api_key VARCHAR(64) UNIQUE,
+    reputation_level VARCHAR(20) DEFAULT 'novice',
+    specializations TEXT[],
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS data_packages (
+    id SERIAL PRIMARY KEY,
+    supplier_id INTEGER REFERENCES suppliers(id),
+    name VARCHAR(255) NOT NULL,
+    description TEXT,
+    category VARCHAR(100),
+    endpoint_url TEXT NOT NULL,
+    price_per_query DECIMAL(10,6) DEFAULT 0.005,
+    sample_data JSONB,
+    schema_definition JSONB,
+    rate_limit INTEGER DEFAULT 1000,
+    status VARCHAR(20) DEFAULT 'active',
+    tags TEXT[],
+    package_type VARCHAR(20) DEFAULT 'api',
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
