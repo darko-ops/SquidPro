@@ -14,21 +14,6 @@ jobs:
   test:
     runs-on: ubuntu-latest
     
-    services:
-      postgres:
-        image: postgres:15
-        env:
-          POSTGRES_USER: squidpro
-          POSTGRES_PASSWORD: password
-          POSTGRES_DB: squidpro
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-        ports:
-          - 5432:5432
-
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
@@ -39,7 +24,7 @@ jobs:
     - name: Start services
       run: |
         docker compose up -d --build
-        sleep 10
+        sleep 15
 
     - name: Wait for API to be ready
       run: |
@@ -76,7 +61,7 @@ jobs:
         if echo "$RESPONSE" | jq -e '.package_id' > /dev/null; then
           echo "Clean upload successful"
         else
-          echo "Upload failed: $RESPONSE"
+          echo "Upload failed"
           exit 1
         fi
 
