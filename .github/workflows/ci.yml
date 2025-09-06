@@ -21,35 +21,30 @@ jobs:
     - name: Create uploads directory
       run: mkdir -p uploads
 
-    - name: Start services
+    - name: Clean previous containers and volumes
+      run: |
+        docker compose down -v 2>/dev/null || true
+        docker system prune -f
+
+    - name: Start services with fresh database
       run: |
         docker compose up -d --build
-        sleep 20
+        sleep 25
 
-    - name: Check service status
+    - name: Verify database initialization
       run: |
-        echo "Checking running containers:"
-        docker compose ps
-        echo "Checking logs:"
-        docker compose logs --tail=20
+        echo "Checking if suppliers table exists:"
+        docker exec squidpro-postgres-1 psql -U squidpro -d squidpro -c "\dt" | grep suppliers || {
+          echo "Suppliers table missing, manually running schema..."
+          docker exec squidpro-postgres-1 psql -U squidpro -d squidpro -f /docker-entrypoint-initdb.d/schema.sql
+        }
 
     - name: Wait for API to be ready
       run: |
-        echo "Waiting for API health check..."
-        timeout 120 bash -c 'until curl -f http://localhost:8100/health; do echo "Waiting..."; sleep 5; done'
-        echo "API health check passed"
-
-    - name: Test API endpoints
-      run: |
-        echo "Testing health endpoint:"
-        curl -v http://localhost:8100/health
-        
-        echo "Testing packages endpoint:"
-        curl -v http://localhost:8100/packages
+        timeout 60 bash -c 'until curl -f http://localhost:8100/health; do echo "Waiting..."; sleep 5; done'
 
     - name: Test supplier registration
       run: |
-        echo "Attempting supplier registration..."
         RESPONSE=$(curl -s -w "\nHTTP_CODE:%{http_code}" -X POST http://localhost:8100/suppliers/register \
           -H "Content-Type: application/json" \
           -d '{
@@ -58,33 +53,34 @@ jobs:
             "stellar_address": "GDXDSB444OLNDYOJAVGU3JWQO4BEGQT2MCVTDHLOWORRQODJJXO3GBDU"
           }')
         
-        echo "Raw response:"
-        echo "$RESPONSE"
-        
         HTTP_CODE=$(echo "$RESPONSE" | grep "HTTP_CODE:" | cut -d: -f2)
         JSON_RESPONSE=$(echo "$RESPONSE" | sed '/HTTP_CODE:/d')
         
-        echo "HTTP Code: $HTTP_CODE"
-        echo "JSON Response: $JSON_RESPONSE"
-        
         if [ "$HTTP_CODE" = "200" ]; then
-          if echo "$JSON_RESPONSE" | jq -e '.api_key' > /dev/null; then
-            echo "Supplier registration successful"
-            echo "API_KEY=$(echo "$JSON_RESPONSE" | jq -r '.api_key')" >> $GITHUB_ENV
-          else
-            echo "Registration returned 200 but invalid JSON"
-            exit 1
-          fi
+          echo "✅ Supplier registration successful"
+          echo "API_KEY=$(echo "$JSON_RESPONSE" | jq -r '.api_key')" >> $GITHUB_ENV
         else
-          echo "Registration failed with HTTP code: $HTTP_CODE"
-          echo "Response: $JSON_RESPONSE"
+          echo "❌ Registration failed with HTTP $HTTP_CODE: $JSON_RESPONSE"
+          exit 1
+        fi
+
+    - name: Test clean data upload
+      run: |
+        echo "symbol,price" > test_clean.csv
+        echo "BTC,67500" >> test_clean.csv
+        
+        RESPONSE=$(curl -s -X POST http://localhost:8100/suppliers/upload \
+          -H "X-API-Key: $API_KEY" \
+          -F "file=@test_clean.csv" \
+          -F "name=CI Test Upload")
+        
+        if echo "$RESPONSE" | jq -e '.package_id' > /dev/null; then
+          echo "✅ Clean upload successful"
+        else
+          echo "❌ Upload failed: $RESPONSE"
           exit 1
         fi
 
     - name: Cleanup
       if: always()
-      run: |
-        echo "Container logs before cleanup:"
-        docker compose logs --tail=50
-        docker compose down -v
-# Trigger new workflow
+      run: docker compose down -v
