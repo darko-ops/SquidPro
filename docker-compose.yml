@@ -6,6 +6,8 @@ services:
       - ./squidpro-api/app.py:/app/app.py
       - ./squidpro-api/public:/app/public
       - ./uploads:/app/uploads  
+      - ./squidpro-frontend/dist:/app/public
+
     environment:
     - SQUIDPRO_SECRET=supersecret_change_me
     - PRICE_PER_QUERY_USD=0.005
