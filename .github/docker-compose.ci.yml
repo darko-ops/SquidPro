@@ -1,0 +1,21 @@
+version: "3.9"
+services:
+  squidpro-api:
+    environment:
+      - SQUIDPRO_SECRET=ci_test_secret
+      - STELLAR_SECRET_KEY=SDFF2WLXYOHAIA2NPOFJJXTJAU5DD6EBDWGTCFBQVGATEZJJWBTR23SH
+      - STELLAR_NETWORK=testnet
+    ports:
+      - "8100:8100"
+      
+  collector-crypto:
+    ports:
+      - "8200:8200"
+      
+  postgres:
+    environment:
+      - POSTGRES_USER=squidpro
+      - POSTGRES_PASSWORD=password  
+      - POSTGRES_DB=squidpro
+    ports:
+      - "5432:5432"

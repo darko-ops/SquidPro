@@ -11,13 +11,12 @@ from fastapi import FastAPI, Header, HTTPException, Query, File, UploadFile, For
 from fastapi.responses import JSONResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from stellar_sdk import Keypair, Network, Server, TransactionBuilder, Asset
 from stellar_sdk.exceptions import SdkError
 
 import pandas as pd
-
 # Create uploads directory
 UPLOAD_DIR = "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -49,6 +48,7 @@ except Exception as e:
 
 # Database connection pool
 db_pool = None
+
 
 # PII Detection Enums
 class PIIType(Enum):
@@ -163,6 +163,8 @@ api.add_middleware(
     allow_headers=["*"],
 )
 
+
+
 if os.path.exists("public"):
     api.mount("/static", StaticFiles(directory="public"), name="static")
 
@@ -170,7 +172,7 @@ if os.path.exists("public"):
 class MintReq(BaseModel):
     agent_id: str
     scope: str = "data.read.price"
-    credits: float = 1.0
+    credits: float = Field(..., ge=0.001, le=1000.0)
 
 class ReviewerRegistration(BaseModel):
     name: str
@@ -364,7 +366,8 @@ async def register_reviewer(reviewer: ReviewerRegistration):
     """Register as a data quality reviewer"""
     async with db_pool.acquire() as conn:
         # Generate API key
-        api_key = f"rev_{secrets.token_urlsafe(16)}"
+        api_key = f"sup_{secrets.token_urlsafe(32)}"
+        api_key_hash = hashlib.sha256(api_key.encode()).hexdigest()
         
         # Insert reviewer
         reviewer_id = await conn.fetchval("""
@@ -985,7 +988,8 @@ async def register_supplier(supplier: SupplierRegistration):
     """Register a new data supplier"""
     async with db_pool.acquire() as conn:
         # Generate API key
-        api_key = f"sup_{secrets.token_urlsafe(16)}"
+        api_key = f"sup_{secrets.token_urlsafe(32)}"
+        api_key_hash = hashlib.sha256(api_key.encode()).hexdigest()
         
         # Insert supplier
         supplier_id = await conn.fetchval("""

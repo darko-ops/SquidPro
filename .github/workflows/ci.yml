@@ -1,0 +1,71 @@
+name: SquidPro CI/CD
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  DOCKER_BUILDKIT: 1
+  COMPOSE_DOCKER_CLI_BUILD: 1
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Create uploads directory
+      run: mkdir -p uploads
+
+    - name: Start services
+      run: |
+        docker compose up -d --build
+        sleep 25
+
+    - name: Debug database state
+      run: |
+        echo "=== Database Tables ==="
+        docker exec squidpro-postgres-1 psql -U squidpro -d squidpro -c "\dt"
+        
+        echo "=== Checking for suppliers table specifically ==="
+        docker exec squidpro-postgres-1 psql -U squidpro -d squidpro -c "SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'suppliers';"
+        
+        echo "=== Force run schema.sql ==="
+        docker exec squidpro-postgres-1 psql -U squidpro -d squidpro -f /docker-entrypoint-initdb.d/schema.sql
+        
+        echo "=== Tables after schema run ==="
+        docker exec squidpro-postgres-1 psql -U squidpro -d squidpro -c "\dt"
+
+    - name: Check API logs for errors
+      run: |
+        echo "=== API Container Logs ==="
+        docker logs squidpro-squidpro-api-1
+
+    - name: Test API health
+      run: |
+        curl -v http://localhost:8100/health
+
+    - name: Test supplier registration with API logs
+      run: |
+        echo "=== Attempting supplier registration ==="
+        RESPONSE=$(curl -s -w "\nHTTP_CODE:%{http_code}" -X POST http://localhost:8100/suppliers/register \
+          -H "Content-Type: application/json" \
+          -d '{
+            "name": "CI Test Supplier",
+            "email": "ci-test@example.com",
+            "stellar_address": "GDXDSB444OLNDYOJAVGU3JWQO4BEGQT2MCVTDHLOWORRQODJJXO3GBDU"
+          }')
+        
+        echo "=== Response ==="
+        echo "$RESPONSE"
+        
+        echo "=== API Logs After Request ==="
+        docker logs squidpro-squidpro-api-1 --tail=20
+
+    - name: Cleanup
+      if: always()
+      run: docker compose down -v
