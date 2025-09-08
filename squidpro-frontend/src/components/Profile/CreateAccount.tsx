@@ -153,7 +153,12 @@ const CreateAccount: React.FC<CreateAccountProps> = ({ onAccountCreated, onSwitc
     }
   };
 
-
+  const handleLoginWithNewAccount = (role: 'supplier' | 'reviewer') => {
+    const apiKey = form.apiKeys[role];
+    if (apiKey) {
+      onAccountCreated(apiKey, role);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -195,15 +200,16 @@ const CreateAccount: React.FC<CreateAccountProps> = ({ onAccountCreated, onSwitc
 
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Full Name *</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Username *</label>
               <input
                 type="text"
                 value={form.name}
                 onChange={(e) => setForm(prev => ({ ...prev, name: e.target.value }))}
-                placeholder="Your full name"
+                placeholder="Choose a username"
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 required
               />
+              <p className="text-xs text-gray-500 mt-1">This will be used to sign in to your account</p>
             </div>
 
             <div>
@@ -507,8 +513,15 @@ const CreateAccount: React.FC<CreateAccountProps> = ({ onAccountCreated, onSwitc
           </div>
 
           <button
-            onClick={onSwitchToSignIn}
-            className="w-full bg-gray-100 text-gray-700 py-2 px-4 rounded-md hover:bg-gray-200 transition-colors"
+            onClick={() => {
+              // Auto-login with all API keys
+              if (Object.keys(form.apiKeys).length > 0) {
+                onAccountCreated(form.apiKeys);
+              } else {
+                onSwitchToSignIn();
+              }
+            }}
+            className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 transition-colors"
           >
             Continue to Dashboard
           </button>
