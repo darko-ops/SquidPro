@@ -361,43 +361,160 @@ async def serve_catalog_alt():
         return {"error": "catalog.html not found in public directory"}
 # Reviewer System Endpoints
 
+# Replace the reviewer and supplier registration functions in your app.py
+
 @api.post("/reviewers/register")
 async def register_reviewer(reviewer: ReviewerRegistration):
     """Register as a data quality reviewer"""
     async with db_pool.acquire() as conn:
-        # Generate API key
+        # Check for existing email
+        existing_email = await conn.fetchval("""
+            SELECT email FROM reviewers WHERE email = $1
+            UNION
+            SELECT email FROM suppliers WHERE email = $1
+        """, reviewer.email)
+        
+        if existing_email:
+            raise HTTPException(status_code=409, detail="Email already registered")
+        
+        # Check for existing name
+        existing_name = await conn.fetchval("""
+            SELECT name FROM reviewers WHERE name = $1
+            UNION
+            SELECT name FROM suppliers WHERE name = $1
+        """, reviewer.name)
+        
+        if existing_name:
+            raise HTTPException(status_code=409, detail="Username already taken")
+        
+        # Check for existing stellar address
+        existing_stellar = await conn.fetchval("""
+            SELECT stellar_address FROM reviewers WHERE stellar_address = $1
+            UNION
+            SELECT stellar_address FROM suppliers WHERE stellar_address = $1
+        """, reviewer.stellar_address)
+        
+        if existing_stellar:
+            raise HTTPException(status_code=409, detail="Stellar address already registered")
+        
+        # Generate API key with correct prefix
+        api_key = f"rev_{secrets.token_urlsafe(32)}"  # ← FIXED: was "sup_"
+        api_key_hash = hashlib.sha256(api_key.encode()).hexdigest()
+        
+        try:
+            # Insert reviewer
+            reviewer_id = await conn.fetchval("""
+                INSERT INTO reviewers (name, stellar_address, email, specializations, api_key)
+                VALUES ($1, $2, $3, $4, $5)
+                RETURNING id
+            """, reviewer.name, reviewer.stellar_address, reviewer.email, 
+            reviewer.specializations, api_key)
+            
+            # Create balance entry
+            await conn.execute("""
+                INSERT INTO balances (user_type, user_id, payout_threshold_usd)
+                VALUES ('reviewer', $1, 5.00)
+            """, str(reviewer_id))
+            
+            # Initialize stats
+            await conn.execute("""
+                INSERT INTO reviewer_stats (reviewer_id) VALUES ($1)
+            """, reviewer_id)
+            
+            return {
+                "reviewer_id": reviewer_id,
+                "api_key": api_key,
+                "status": "registered",
+                "message": "Reviewer registered successfully. Save your API key securely."
+            }
+            
+        except Exception as e:
+            # Handle any database constraint violations
+            error_msg = str(e).lower()
+            if "email" in error_msg and "unique" in error_msg:
+                raise HTTPException(status_code=409, detail="Email already registered")
+            elif "name" in error_msg and "unique" in error_msg:
+                raise HTTPException(status_code=409, detail="Username already taken") 
+            elif "stellar_address" in error_msg and "unique" in error_msg:
+                raise HTTPException(status_code=409, detail="Stellar address already registered")
+            else:
+                raise HTTPException(status_code=500, detail=f"Registration failed: {str(e)}")
+
+@api.post("/suppliers/register")
+async def register_supplier(supplier: SupplierRegistration):
+    """Register a new data supplier"""
+    async with db_pool.acquire() as conn:
+        # Check for existing email
+        existing_email = await conn.fetchval("""
+            SELECT email FROM suppliers WHERE email = $1
+            UNION
+            SELECT email FROM reviewers WHERE email = $1
+        """, supplier.email)
+        
+        if existing_email:
+            raise HTTPException(status_code=409, detail="Email already registered")
+        
+        # Check for existing name
+        existing_name = await conn.fetchval("""
+            SELECT name FROM suppliers WHERE name = $1
+            UNION
+            SELECT name FROM reviewers WHERE name = $1
+        """, supplier.name)
+        
+        if existing_name:
+            raise HTTPException(status_code=409, detail="Username already taken")
+        
+        # Check for existing stellar address
+        existing_stellar = await conn.fetchval("""
+            SELECT stellar_address FROM suppliers WHERE stellar_address = $1
+            UNION
+            SELECT stellar_address FROM reviewers WHERE stellar_address = $1
+        """, supplier.stellar_address)
+        
+        if existing_stellar:
+            raise HTTPException(status_code=409, detail="Stellar address already registered")
+        
+        # Generate API key with correct prefix
         api_key = f"sup_{secrets.token_urlsafe(32)}"
         api_key_hash = hashlib.sha256(api_key.encode()).hexdigest()
         
-        # Insert reviewer
-        reviewer_id = await conn.fetchval("""
-            INSERT INTO reviewers (name, stellar_address, email, specializations, api_key)
-            VALUES ($1, $2, $3, $4, $5)
-            RETURNING id
-        """, reviewer.name, reviewer.stellar_address, reviewer.email, 
-        reviewer.specializations, api_key)
-        
-        # Create balance entry
-        await conn.execute("""
-            INSERT INTO balances (user_type, user_id, payout_threshold_usd)
-            VALUES ('reviewer', $1, 5.00)
-        """, str(reviewer_id))
-        
-        # Initialize stats
-        await conn.execute("""
-            INSERT INTO reviewer_stats (reviewer_id) VALUES ($1)
-        """, reviewer_id)
-        
-        return {
-            "reviewer_id": reviewer_id,
-            "api_key": api_key,
-            "status": "registered",
-            "message": "Reviewer registered successfully. Save your API key securely."
-        }
+        try:
+            # Insert supplier
+            supplier_id = await conn.fetchval("""
+                INSERT INTO suppliers (name, email, stellar_address, api_key)
+                VALUES ($1, $2, $3, $4)
+                RETURNING id
+            """, supplier.name, supplier.email, supplier.stellar_address, api_key)
+            
+            # Create balance entry
+            await conn.execute("""
+                INSERT INTO balances (user_type, user_id, payout_threshold_usd)
+                VALUES ('supplier', $1, 25.00)
+            """, str(supplier_id))
+            
+            return {
+                "supplier_id": supplier_id,
+                "api_key": api_key,
+                "status": "registered",
+                "message": "Supplier registered successfully. Save your API key securely."
+            }
+            
+        except Exception as e:
+            # Handle any database constraint violations
+            error_msg = str(e).lower()
+            if "email" in error_msg and "unique" in error_msg:
+                raise HTTPException(status_code=409, detail="Email already registered")
+            elif "name" in error_msg and "unique" in error_msg:
+                raise HTTPException(status_code=409, detail="Username already taken")
+            elif "stellar_address" in error_msg and "unique" in error_msg:
+                raise HTTPException(status_code=409, detail="Stellar address already registered")
+            else:
+                raise HTTPException(status_code=500, detail=f"Registration failed: {str(e)}")
 
+# Also fix the authenticate_reviewer function to use the correct prefix
 async def authenticate_reviewer(api_key: str):
     """Authenticate reviewer by API key"""
-    if not api_key or not api_key.startswith('rev_'):
+    if not api_key or not api_key.startswith('rev_'):  # ← FIXED: was checking for 'rev_' but generating 'sup_'
         raise HTTPException(status_code=401, detail="Invalid reviewer API key")
     
     async with db_pool.acquire() as conn:
@@ -563,7 +680,74 @@ async def submit_review(
             "task_name": task["package_name"],
             "message": f"Review submitted. {task['required_reviews'] - review_count} more reviews needed for consensus."
         }
+# Add this to your app.py or create a separate migration file
 
+async def add_unique_constraints():
+    """Add unique constraints to database tables"""
+    async with db_pool.acquire() as conn:
+        constraints = [
+            # Suppliers table constraints
+            "ALTER TABLE suppliers ADD CONSTRAINT IF NOT EXISTS suppliers_email_unique UNIQUE (email)",
+            "ALTER TABLE suppliers ADD CONSTRAINT IF NOT EXISTS suppliers_name_unique UNIQUE (name)", 
+            "ALTER TABLE suppliers ADD CONSTRAINT IF NOT EXISTS suppliers_stellar_address_unique UNIQUE (stellar_address)",
+            "ALTER TABLE suppliers ADD CONSTRAINT IF NOT EXISTS suppliers_api_key_unique UNIQUE (api_key)",
+            
+            # Reviewers table constraints
+            "ALTER TABLE reviewers ADD CONSTRAINT IF NOT EXISTS reviewers_email_unique UNIQUE (email)",
+            "ALTER TABLE reviewers ADD CONSTRAINT IF NOT EXISTS reviewers_name_unique UNIQUE (name)",
+            "ALTER TABLE reviewers ADD CONSTRAINT IF NOT EXISTS reviewers_stellar_address_unique UNIQUE (stellar_address)", 
+            "ALTER TABLE reviewers ADD CONSTRAINT IF NOT EXISTS reviewers_api_key_unique UNIQUE (api_key)"
+        ]
+        
+        for constraint_sql in constraints:
+            try:
+                await conn.execute(constraint_sql)
+                print(f"✅ Applied constraint: {constraint_sql}")
+            except Exception as e:
+                if "already exists" in str(e):
+                    print(f"⏭️ Constraint already exists: {constraint_sql}")
+                else:
+                    print(f"❌ Failed to apply constraint: {constraint_sql} - {e}")
+
+# Add this endpoint to run migrations manually
+@api.post("/admin/migrate")
+async def run_migrations():
+    """Run database migrations - ADMIN ONLY"""
+    try:
+        await add_unique_constraints()
+        return {"status": "success", "message": "Database constraints applied"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Migration failed: {str(e)}")
+
+# Or run automatically on startup by adding this to your lifespan function:
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    global db_pool
+    max_retries = 10
+    retry_delay = 2
+    
+    for attempt in range(max_retries):
+        try:
+            logging.info(f"Attempting to connect to database (attempt {attempt + 1}/{max_retries})")
+            db_pool = await asyncpg.create_pool(DATABASE_URL)
+            logging.info("Successfully connected to database")
+            
+            # Run migrations on startup
+            await add_unique_constraints()
+            logging.info("Database migrations completed")
+            break
+        except Exception as e:
+            logging.warning(f"Database connection failed: {e}")
+            if attempt == max_retries - 1:
+                logging.error("Max retries reached, giving up")
+                raise
+            logging.info(f"Retrying in {retry_delay} seconds...")
+            await asyncio.sleep(retry_delay)
+    
+    yield
+    
+    if db_pool:
+        await db_pool.close()
 async def process_review_consensus(conn, task_id: int):
     """Process consensus when enough reviews are submitted"""
     # Get all submissions for this task
@@ -2143,3 +2327,98 @@ async def list_uploads(x_api_key: Optional[str] = Header(None)):
             for upload in uploads
         ]
     
+@api.get("/auth/check-username")
+async def check_username_availability(username: str):
+    """
+    Check if a username is available
+    
+    Query params:
+    - username: The username to check
+    
+    Returns:
+    {
+        "available": true/false,
+        "message": "Username is available" or "Username is taken"
+    }
+    """
+    pass
+
+# 2. Email availability check  
+@api.get("/auth/check-email")
+async def check_email_availability(email: str):
+    """
+    Check if an email is already registered
+    
+    Query params:
+    - email: The email to check
+    
+    Returns:
+    {
+        "available": true/false,
+        "message": "Email is available" or "Email is already registered"
+    }
+    """
+    pass
+
+# 3. New unified registration endpoint
+@api.post("/auth/register")
+async def register_user(user_data: UserRegistration):
+    """
+    Register a new user with multiple roles
+    
+    Request body:
+    {
+        "username": "johndoe123",
+        "name": "John Doe", 
+        "email": "john@example.com",
+        "password": "securepassword123",
+        "stellar_address": "GDXDSB444...",
+        "roles": {
+            "supplier": true,
+            "buyer": true,
+            "reviewer": false
+        },
+        "reviewer_specializations": ["financial", "crypto"] // optional
+    }
+    
+    Returns:
+    {
+        "user_id": 123,
+        "username": "johndoe123",
+        "api_keys": {
+            "supplier": "sup_abc123...",
+            "reviewer": "rev_def456..." // only if reviewer role selected
+        },
+        "message": "Account created successfully"
+    }
+    """
+    pass
+
+# 4. Username/password login endpoint
+@api.post("/auth/login")
+async def login_user(credentials: LoginCredentials):
+    """
+    Login with username and password
+    
+    Request body:
+    {
+        "username": "johndoe123",
+        "password": "securepassword123"
+    }
+    
+    Returns:
+    {
+        "user_id": 123,
+        "username": "johndoe123",
+        "api_keys": {
+            "supplier": "sup_abc123...",
+            "reviewer": "rev_def456..."
+        },
+        "roles": {
+            "supplier": true,
+            "buyer": true, 
+            "reviewer": true
+        }
+    }
+    """
+    pass

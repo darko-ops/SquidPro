@@ -13,7 +13,8 @@ import {
   Eye,
   TrendingUp,
   Clock,
-  CheckCircle
+  CheckCircle,
+  AlertCircle
 } from 'lucide-react';
 
 interface DashboardProps {
@@ -31,11 +32,17 @@ interface DashboardProps {
 type TabType = 'buying' | 'supplying' | 'reviewing';
 
 const Dashboard: React.FC<DashboardProps> = ({ userRoles, apiKeys, onLogout }) => {
+  // Debug: Log the roles and API keys
+  console.log('Dashboard Debug - userRoles:', userRoles);
+  console.log('Dashboard Debug - apiKeys:', apiKeys);
+  
   // Determine available tabs based on user roles
   const availableTabs = [];
   if (userRoles.supplier || userRoles.reviewer) availableTabs.push('buying'); // Everyone can buy
   if (userRoles.supplier) availableTabs.push('supplying');
   if (userRoles.reviewer) availableTabs.push('reviewing');
+
+  console.log('Dashboard Debug - availableTabs:', availableTabs);
 
   const [activeTab, setActiveTab] = useState<TabType>(availableTabs[0] as TabType);
 
@@ -44,6 +51,16 @@ const Dashboard: React.FC<DashboardProps> = ({ userRoles, apiKeys, onLogout }) =
 
   const BuyingTab = () => (
     <div className="space-y-6">
+      {/* Debug Section */}
+      <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+        <h4 className="font-medium text-yellow-800 mb-2">Debug Information</h4>
+        <div className="text-sm text-yellow-700 space-y-1">
+          <p><strong>API Keys:</strong> {Object.keys(apiKeys).join(', ') || 'None'}</p>
+          <p><strong>User Roles:</strong> {Object.keys(userRoles).join(', ') || 'None'}</p>
+          <p><strong>Available Tabs:</strong> {availableTabs.join(', ')}</p>
+        </div>
+      </div>
+
       {/* Buying Stats */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="bg-white p-6 rounded-lg border border-gray-200">
@@ -330,6 +347,29 @@ const Dashboard: React.FC<DashboardProps> = ({ userRoles, apiKeys, onLogout }) =
             Logout
           </button>
         </div>
+
+        {/* Debug Section */}
+        {!userRoles.reviewer && (
+          <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 mb-8">
+            <div className="flex items-start">
+              <AlertCircle className="h-5 w-5 text-orange-600 mt-0.5 mr-3 flex-shrink-0" />
+              <div>
+                <h4 className="font-medium text-orange-800 mb-1">Missing Reviewer Access</h4>
+                <p className="text-sm text-orange-700 mb-2">
+                  You don't have reviewer access. This could be because:
+                </p>
+                <ul className="text-sm text-orange-700 list-disc list-inside space-y-1">
+                  <li>You didn't select "Quality Reviewer" during registration</li>
+                  <li>The reviewer registration failed</li>
+                  <li>Your reviewer API key isn't working</li>
+                </ul>
+                <p className="text-sm text-orange-700 mt-2">
+                  <strong>API Keys you have:</strong> {Object.keys(apiKeys).join(', ') || 'None'}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Account Overview */}
         <div className="bg-white rounded-lg border border-gray-200 p-6 mb-8">
