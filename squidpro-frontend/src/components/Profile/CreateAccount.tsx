@@ -6,11 +6,12 @@ import {
   ShoppingCart,
   Shield,
   Check,
-  Loader
+  Loader,
+  AlertCircle
 } from 'lucide-react';
 
 interface CreateAccountProps {
-  onAccountCreated: (apiKey: string, userType: 'supplier' | 'reviewer') => void;
+  onAccountCreated: (apiKeys: Record<string, string>) => void;
   onSwitchToSignIn: () => void;
 }
 
@@ -51,6 +52,11 @@ const CreateAccount: React.FC<CreateAccountProps> = ({ onAccountCreated, onSwitc
     apiKeys: {} as Record<string, string>
   });
 
+  const validateStellarAddress = (address: string): boolean => {
+    // Basic Stellar address validation
+    return address.length === 56 && address.startsWith('G');
+  };
+
   const handleBasicInfoNext = () => {
     const { name, email, password, confirmPassword, stellarAddress } = form;
     
@@ -66,6 +72,18 @@ const CreateAccount: React.FC<CreateAccountProps> = ({ onAccountCreated, onSwitc
     
     if (password.length < 6) {
       setForm(prev => ({ ...prev, error: 'Password must be at least 6 characters' }));
+      return;
+    }
+
+    if (!validateStellarAddress(stellarAddress)) {
+      setForm(prev => ({ ...prev, error: 'Please enter a valid Stellar address (starts with G, 56 characters)' }));
+      return;
+    }
+
+    // Basic email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      setForm(prev => ({ ...prev, error: 'Please enter a valid email address' }));
       return;
     }
     
@@ -97,54 +115,84 @@ const CreateAccount: React.FC<CreateAccountProps> = ({ onAccountCreated, onSwitc
     try {
       const { roles } = form;
       const apiKeys: Record<string, string> = {};
+      const registrationResults: string[] = [];
       
       // Register as supplier if selected
       if (roles.supplier) {
-        const supplierResponse = await fetch('http://localhost:8100/suppliers/register', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            name: form.name,
-            email: form.email,
-            stellar_address: form.stellarAddress
-          })
-        });
-        
-        if (supplierResponse.ok) {
-          const data = await supplierResponse.json();
-          apiKeys.supplier = data.api_key;
+        try {
+          console.log('Registering supplier...');
+          const supplierResponse = await fetch('http://localhost:8100/suppliers/register', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              name: form.name,
+              email: form.email,
+              stellar_address: form.stellarAddress
+            })
+          });
+          
+          if (supplierResponse.ok) {
+            const data = await supplierResponse.json();
+            console.log('Supplier registration response:', data);
+            apiKeys.supplier = data.api_key;
+            registrationResults.push('Supplier account created');
+          } else {
+            const errorData = await supplierResponse.json();
+            throw new Error(`Supplier registration failed: ${errorData.detail || 'Unknown error'}`);
+          }
+        } catch (error) {
+          console.error('Supplier registration error:', error);
+          throw new Error(`Failed to create supplier account: ${(error as Error).message}`);
         }
       }
       
       // Register as reviewer if selected
       if (roles.reviewer) {
-        const reviewerResponse = await fetch('http://localhost:8100/reviewers/register', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            name: form.name,
-            email: form.email,
-            stellar_address: form.stellarAddress,
-            specializations: form.reviewerSpecializations.split(',').map(s => s.trim()).filter(s => s)
-          })
-        });
-        
-        if (reviewerResponse.ok) {
-          const data = await reviewerResponse.json();
-          apiKeys.reviewer = data.api_key;
+        try {
+          console.log('Registering reviewer...');
+          const reviewerResponse = await fetch('http://localhost:8100/reviewers/register', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              name: form.name,
+              email: form.email,
+              stellar_address: form.stellarAddress,
+              specializations: form.reviewerSpecializations.split(',').map(s => s.trim()).filter(s => s)
+            })
+          });
+          
+          if (reviewerResponse.ok) {
+            const data = await reviewerResponse.json();
+            console.log('Reviewer registration response:', data);
+            apiKeys.reviewer = data.api_key;
+            registrationResults.push('Reviewer account created');
+          } else {
+            const errorData = await reviewerResponse.json();
+            throw new Error(`Reviewer registration failed: ${errorData.detail || 'Unknown error'}`);
+          }
+        } catch (error) {
+          console.error('Reviewer registration error:', error);
+          throw new Error(`Failed to create reviewer account: ${(error as Error).message}`);
         }
       }
+
+      if (Object.keys(apiKeys).length === 0) {
+        throw new Error('No accounts were created. Please try again.');
+      }
+      
+      console.log('Registration complete. API keys:', apiKeys);
       
       setForm(prev => ({ 
         ...prev, 
         isLoading: false,
         apiKeys,
-        success: 'Account created successfully!'
+        success: `Account created successfully! ${registrationResults.join(' and ')}.`
       }));
       
       setCurrentStep('complete');
       
     } catch (error) {
+      console.error('Registration error:', error);
       setForm(prev => ({ 
         ...prev, 
         isLoading: false, 
@@ -153,10 +201,12 @@ const CreateAccount: React.FC<CreateAccountProps> = ({ onAccountCreated, onSwitc
     }
   };
 
-  const handleLoginWithNewAccount = (role: 'supplier' | 'reviewer') => {
-    const apiKey = form.apiKeys[role];
-    if (apiKey) {
-      onAccountCreated(apiKey, role);
+  const handleLoginWithNewAccount = () => {
+    console.log('Logging in with new account API keys:', form.apiKeys);
+    if (Object.keys(form.apiKeys).length > 0) {
+      onAccountCreated(form.apiKeys);
+    } else {
+      setForm(prev => ({ ...prev, error: 'No API keys available. Please try registering again.' }));
     }
   };
 
@@ -209,7 +259,7 @@ const CreateAccount: React.FC<CreateAccountProps> = ({ onAccountCreated, onSwitc
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 required
               />
-              <p className="text-xs text-gray-500 mt-1">This will be used to sign in to your account</p>
+              <p className="text-xs text-gray-500 mt-1">This will be your display name on SquidPro</p>
             </div>
 
             <div>
@@ -258,12 +308,13 @@ const CreateAccount: React.FC<CreateAccountProps> = ({ onAccountCreated, onSwitc
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 required
               />
-              <p className="text-xs text-gray-500 mt-1">For receiving XLM payments</p>
+              <p className="text-xs text-gray-500 mt-1">For receiving XLM payments. Must start with 'G' and be 56 characters long.</p>
             </div>
           </div>
 
           {form.error && (
-            <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-md text-sm">
+            <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-md text-sm flex items-start">
+              <AlertCircle className="h-4 w-4 mr-2 mt-0.5 flex-shrink-0" />
               {form.error}
             </div>
           )}
@@ -372,7 +423,8 @@ const CreateAccount: React.FC<CreateAccountProps> = ({ onAccountCreated, onSwitc
           </div>
 
           {form.error && (
-            <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-md text-sm">
+            <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-md text-sm flex items-start">
+              <AlertCircle className="h-4 w-4 mr-2 mt-0.5 flex-shrink-0" />
               {form.error}
             </div>
           )}
@@ -438,7 +490,8 @@ const CreateAccount: React.FC<CreateAccountProps> = ({ onAccountCreated, onSwitc
           </div>
 
           {form.error && (
-            <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-md text-sm">
+            <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-md text-sm flex items-start">
+              <AlertCircle className="h-4 w-4 mr-2 mt-0.5 flex-shrink-0" />
               {form.error}
             </div>
           )}
@@ -494,14 +547,8 @@ const CreateAccount: React.FC<CreateAccountProps> = ({ onAccountCreated, onSwitc
               <div key={role} className="bg-gray-50 border border-gray-200 rounded-md p-3">
                 <div className="flex justify-between items-center mb-2">
                   <span className="text-sm font-medium text-gray-700 capitalize">{role} API Key:</span>
-                  <button
-                    onClick={() => handleLoginWithNewAccount(role as 'supplier' | 'reviewer')}
-                    className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded hover:bg-blue-200"
-                  >
-                    Use This Account
-                  </button>
                 </div>
-                <code className="text-xs text-gray-600 break-all">{apiKey}</code>
+                <code className="text-xs text-gray-600 break-all block mb-2">{apiKey}</code>
               </div>
             ))}
           </div>
@@ -512,19 +559,107 @@ const CreateAccount: React.FC<CreateAccountProps> = ({ onAccountCreated, onSwitc
             </p>
           </div>
 
+          {form.error && (
+            <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-md text-sm flex items-start">
+              <AlertCircle className="h-4 w-4 mr-2 mt-0.5 flex-shrink-0" />
+              {form.error}
+            </div>
+          )}
+
           <button
-            onClick={() => {
-              // Auto-login with all API keys
-              if (Object.keys(form.apiKeys).length > 0) {
-                onAccountCreated(form.apiKeys);
-              } else {
-                onSwitchToSignIn();
-              }
-            }}
+            onClick={handleLoginWithNewAccount}
             className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 transition-colors"
           >
             Continue to Dashboard
           </button>
+
+          <div className="text-center">
+            <button
+              onClick={onSwitchToSignIn}
+              className="text-gray-600 hover:text-gray-900 text-sm"
+            >
+              Sign in with a different account
+            </button>
+          </div>
+
+          {/* Debug Helper Section */}
+          <div className="mt-6 p-4 bg-yellow-50 border border-yellow-200 rounded-md">
+            <h4 className="font-medium text-yellow-800 mb-2">🔧 Fix Existing Account</h4>
+            <p className="text-sm text-yellow-700 mb-3">
+              If you already have an account but missing reviewer access, click below to register as reviewer:
+            </p>
+            <button
+              onClick={async () => {
+                try {
+                  // Get current auth data
+                  const authData = JSON.parse(localStorage.getItem('squidpro_auth') || '{}');
+                  
+                  if (!authData.apiKeys?.supplier) {
+                    alert('No supplier account found. Please sign in first.');
+                    return;
+                  }
+
+                  console.log('🔧 FIX DEBUG - Starting reviewer registration fix...');
+                  
+                  // Get supplier details
+                  const supplierResponse = await fetch('http://localhost:8100/suppliers/me', {
+                    headers: { 'X-API-Key': authData.apiKeys.supplier }
+                  });
+                  
+                  if (!supplierResponse.ok) {
+                    throw new Error('Failed to get supplier details');
+                  }
+                  
+                  const supplierData = await supplierResponse.json();
+                  console.log('📋 FIX DEBUG - Supplier data:', supplierData);
+                  
+                  // Register as reviewer
+                  const reviewerResponse = await fetch('http://localhost:8100/reviewers/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      name: supplierData.name,
+                      email: supplierData.email,
+                      stellar_address: supplierData.stellar_address,
+                      specializations: ['financial', 'crypto', 'accuracy', 'data-quality']
+                    })
+                  });
+                  
+                  if (!reviewerResponse.ok) {
+                    const error = await reviewerResponse.json();
+                    if (reviewerResponse.status === 409) {
+                      throw new Error(`Already registered as reviewer: ${error.detail || 'Account already exists'}`);
+                    } else {
+                      throw new Error(error.detail || 'Reviewer registration failed');
+                    }
+                  }
+                  
+                  const reviewerData = await reviewerResponse.json();
+                  console.log('✅ FIX DEBUG - Reviewer registered:', reviewerData);
+                  
+                  // Validate the API key
+                  if (!reviewerData.api_key || !reviewerData.api_key.startsWith('rev_')) {
+                    console.error('❌ FIX DEBUG - Invalid reviewer API key:', reviewerData.api_key);
+                    alert(`Warning: Received invalid reviewer API key format: ${reviewerData.api_key?.substring(0, 10)}...`);
+                  }
+                  
+                  // Update localStorage
+                  authData.apiKeys.reviewer = reviewerData.api_key;
+                  localStorage.setItem('squidpro_auth', JSON.stringify(authData));
+                  
+                  console.log('💾 FIX DEBUG - Updated localStorage');
+                  alert(`✅ Success! Reviewer account created.\nAPI Key: ${reviewerData.api_key}\n\nPlease refresh the page to see your reviewer dashboard.`);
+                  
+                } catch (error) {
+                  console.error('❌ FIX DEBUG - Failed:', error);
+                  alert(`❌ Failed to register reviewer: ${(error as Error).message}`);
+                }
+              }}
+              className="w-full bg-yellow-600 text-white py-2 px-4 rounded-md hover:bg-yellow-700 transition-colors text-sm"
+            >
+              🔧 Add Reviewer Access to Existing Account
+            </button>
+          </div>
         </div>
       )}
     </div>
