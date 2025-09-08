@@ -6,8 +6,8 @@ import Dashboard from './Dashboard';
 
 interface AuthState {
   isAuthenticated: boolean;
-  apiKey: string;
-  userType: 'supplier' | 'reviewer' | null;
+  apiKeys: Record<string, string>;
+  userRoles: Record<string, any>;
 }
 
 interface ProfileProps {
@@ -19,55 +19,76 @@ type ViewMode = 'signin' | 'register';
 const Profile: React.FC<ProfileProps> = ({ onBack }) => {
   const [authState, setAuthState] = useState<AuthState>({
     isAuthenticated: false,
-    apiKey: '',
-    userType: null
+    apiKeys: {},
+    userRoles: {}
   });
   
   const [viewMode, setViewMode] = useState<ViewMode>('signin');
 
-  // Fetch user data when authenticated
-  const { data: userData } = useQuery({
-    queryKey: ['user-profile', authState.apiKey, authState.userType],
+  // Fetch user data for all roles when authenticated
+  const { data: userData, isLoading } = useQuery({
+    queryKey: ['unified-user-profile', authState.apiKeys],
     queryFn: async () => {
-      if (!authState.apiKey || !authState.userType) return null;
-      
-      const endpoint = authState.userType === 'supplier' ? '/suppliers/me' : '/reviewers/me';
-      const response = await fetch(`http://localhost:8100${endpoint}`, {
-        headers: {
-          'X-API-Key': authState.apiKey
-        }
-      });
-      
-      if (!response.ok) {
-        throw new Error('Failed to fetch user data');
+      if (!authState.isAuthenticated || Object.keys(authState.apiKeys).length === 0) {
+        return null;
       }
-      
-      return response.json();
+
+      const userRoles: Record<string, any> = {};
+
+      // Fetch supplier data if supplier API key exists
+      if (authState.apiKeys.supplier) {
+        try {
+          const response = await fetch('http://localhost:8100/suppliers/me', {
+            headers: { 'X-API-Key': authState.apiKeys.supplier }
+          });
+          if (response.ok) {
+            userRoles.supplier = await response.json();
+          }
+        } catch (error) {
+          console.error('Failed to fetch supplier data:', error);
+        }
+      }
+
+      // Fetch reviewer data if reviewer API key exists
+      if (authState.apiKeys.reviewer) {
+        try {
+          const response = await fetch('http://localhost:8100/reviewers/me', {
+            headers: { 'X-API-Key': authState.apiKeys.reviewer }
+          });
+          if (response.ok) {
+            userRoles.reviewer = await response.json();
+          }
+        } catch (error) {
+          console.error('Failed to fetch reviewer data:', error);
+        }
+      }
+
+      return userRoles;
     },
-    enabled: authState.isAuthenticated && !!authState.apiKey && !!authState.userType,
+    enabled: authState.isAuthenticated && Object.keys(authState.apiKeys).length > 0,
   });
 
-  const handleSignIn = (apiKey: string, userType: 'supplier' | 'reviewer') => {
+  const handleSignIn = (apiKeys: Record<string, string>) => {
     setAuthState({
       isAuthenticated: true,
-      apiKey,
-      userType
+      apiKeys,
+      userRoles: {}
     });
   };
 
-  const handleAccountCreated = (apiKey: string, userType: 'supplier' | 'reviewer') => {
+  const handleAccountCreated = (apiKeys: Record<string, string>) => {
     setAuthState({
       isAuthenticated: true,
-      apiKey,
-      userType
+      apiKeys,
+      userRoles: {}
     });
   };
 
   const handleLogout = () => {
     setAuthState({
       isAuthenticated: false,
-      apiKey: '',
-      userType: null
+      apiKeys: {},
+      userRoles: {}
     });
     setViewMode('signin');
   };
@@ -80,12 +101,21 @@ const Profile: React.FC<ProfileProps> = ({ onBack }) => {
     setViewMode('signin');
   };
 
-  // If authenticated, show dashboard
-  if (authState.isAuthenticated && authState.userType) {
+  // If authenticated, show unified dashboard
+  if (authState.isAuthenticated) {
+    if (isLoading) {
+      return (
+        <div className="flex items-center justify-center py-12">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mr-3"></div>
+          <span className="text-gray-600">Loading your dashboard...</span>
+        </div>
+      );
+    }
+
     return (
       <Dashboard 
-        userData={userData}
-        userType={authState.userType}
+        userRoles={userData || {}}
+        apiKeys={authState.apiKeys}
         onLogout={handleLogout}
       />
     );

@@ -16,8 +16,7 @@ const SignIn: React.FC<SignInProps> = ({ onSignIn, onSwitchToRegister }) => {
     error: ''
   });
 
-  const handleCredentialsLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleCredentialsLogin = async () => {
     setForm(prev => ({ ...prev, isLoading: true, error: '' }));
 
     try {
@@ -68,30 +67,68 @@ const SignIn: React.FC<SignInProps> = ({ onSignIn, onSwitchToRegister }) => {
     }
   };
 
-  const handleApiKeyLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleApiKeyLogin = async () => {
     setForm(prev => ({ ...prev, isLoading: true, error: '' }));
 
     try {
+      const apiKeys: Record<string, string> = {};
+      let userEmail = '';
+      let stellarAddress = '';
+      
       // Try supplier first
       let response = await fetch('http://localhost:8100/suppliers/me', {
         headers: { 'X-API-Key': form.apiKey }
       });
 
-      let apiKeys: Record<string, string> = {};
-      
       if (response.ok) {
+        const supplierData = await response.json();
         apiKeys.supplier = form.apiKey;
+        userEmail = supplierData.email;
+        stellarAddress = supplierData.stellar_address;
       } else {
-        // Try reviewer
+        // Try reviewer if supplier failed
         response = await fetch('http://localhost:8100/reviewers/me', {
           headers: { 'X-API-Key': form.apiKey }
         });
         
         if (response.ok) {
+          const reviewerData = await response.json();
           apiKeys.reviewer = form.apiKey;
+          userEmail = reviewerData.email;
+          stellarAddress = reviewerData.stellar_address;
         } else {
           throw new Error('Invalid API key');
+        }
+      }
+
+      // Now try to find other roles for this user by checking all registered accounts
+      // This is a workaround since we don't have a unified user system yet
+      
+      // If we found a supplier, check if they're also a reviewer
+      if (apiKeys.supplier && userEmail) {
+        try {
+          // Get all reviewers and see if any match this user's email
+          const reviewersResponse = await fetch('http://localhost:8100/reviewers');
+          if (reviewersResponse.ok) {
+            const allReviewers = await reviewersResponse.json();
+            // This would need to be implemented in the backend - for now we'll skip this
+          }
+        } catch (error) {
+          console.log('Could not check for reviewer account');
+        }
+      }
+
+      // If we found a reviewer, check if they're also a supplier  
+      if (apiKeys.reviewer && userEmail) {
+        try {
+          // Get all suppliers and see if any match this user's email
+          const suppliersResponse = await fetch('http://localhost:8100/suppliers');
+          if (suppliersResponse.ok) {
+            const allSuppliers = await suppliersResponse.json();
+            // This would need to be implemented in the backend - for now we'll skip this
+          }
+        } catch (error) {
+          console.log('Could not check for supplier account');
         }
       }
 
@@ -139,107 +176,103 @@ const SignIn: React.FC<SignInProps> = ({ onSignIn, onSwitchToRegister }) => {
         </button>
       </div>
 
-      {/* Credentials Login Form */}
+      {/* Credentials Login */}
       {loginMethod === 'credentials' && (
         <div className="space-y-4">
-          <form onSubmit={handleCredentialsLogin} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Username
-              </label>
-              <input
-                type="text"
-                value={form.username}
-                onChange={(e) => setForm(prev => ({ ...prev, username: e.target.value }))}
-                placeholder="Enter your username"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                required
-              />
-            </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Username
+            </label>
+            <input
+              type="text"
+              value={form.username}
+              onChange={(e) => setForm(prev => ({ ...prev, username: e.target.value }))}
+              placeholder="Enter your username"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              required
+            />
+          </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Password
-              </label>
-              <input
-                type="password"
-                value={form.password}
-                onChange={(e) => setForm(prev => ({ ...prev, password: e.target.value }))}
-                placeholder="Enter your password"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                required
-              />
-            </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Password
+            </label>
+            <input
+              type="password"
+              value={form.password}
+              onChange={(e) => setForm(prev => ({ ...prev, password: e.target.value }))}
+              placeholder="Enter your password"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              required
+            />
+          </div>
 
-            {form.error && (
-              <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-md text-sm">
-                {form.error}
-              </div>
+          {form.error && (
+            <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-md text-sm">
+              {form.error}
+            </div>
+          )}
+
+          <button
+            onClick={handleCredentialsLogin}
+            disabled={form.isLoading}
+            className="w-full bg-gray-900 text-white py-2 px-4 rounded-md hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+          >
+            {form.isLoading ? (
+              <>
+                <Loader className="animate-spin h-4 w-4 mr-2" />
+                Signing in...
+              </>
+            ) : (
+              'Sign In'
             )}
-
-            <button
-              type="submit"
-              disabled={form.isLoading}
-              className="w-full bg-gray-900 text-white py-2 px-4 rounded-md hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
-            >
-              {form.isLoading ? (
-                <>
-                  <Loader className="animate-spin h-4 w-4 mr-2" />
-                  Signing in...
-                </>
-              ) : (
-                'Sign In'
-              )}
-            </button>
-          </form>
+          </button>
         </div>
       )}
 
-      {/* API Key Login Form */}
+      {/* API Key Login */}
       {loginMethod === 'apikey' && (
         <div className="space-y-4">
-          <form onSubmit={handleApiKeyLogin} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                API Key
-              </label>
-              <input
-                type="password"
-                value={form.apiKey}
-                onChange={(e) => setForm(prev => ({ ...prev, apiKey: e.target.value }))}
-                placeholder="sup_... or rev_..."
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                required
-              />
-              <p className="mt-1 text-xs text-gray-500">
-                Use your supplier (sup_...) or reviewer (rev_...) API key
-              </p>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              API Key
+            </label>
+            <input
+              type="password"
+              value={form.apiKey}
+              onChange={(e) => setForm(prev => ({ ...prev, apiKey: e.target.value }))}
+              placeholder="sup_... or rev_..."
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              required
+            />
+            <p className="mt-1 text-xs text-gray-500">
+              Use any of your API keys (supplier or reviewer)
+            </p>
+          </div>
+
+          {form.error && (
+            <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-md text-sm">
+              {form.error}
             </div>
+          )}
 
-            {form.error && (
-              <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-md text-sm">
-                {form.error}
-              </div>
+          <button
+            onClick={handleApiKeyLogin}
+            disabled={form.isLoading}
+            className="w-full bg-gray-900 text-white py-2 px-4 rounded-md hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+          >
+            {form.isLoading ? (
+              <>
+                <Loader className="animate-spin h-4 w-4 mr-2" />
+                Signing in...
+              </>
+            ) : (
+              <>
+                <Key className="h-4 w-4 mr-2" />
+                Sign In with API Key
+              </>
             )}
-
-            <button
-              type="submit"
-              disabled={form.isLoading}
-              className="w-full bg-gray-900 text-white py-2 px-4 rounded-md hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
-            >
-              {form.isLoading ? (
-                <>
-                  <Loader className="animate-spin h-4 w-4 mr-2" />
-                  Signing in...
-                </>
-              ) : (
-                <>
-                  <Key className="h-4 w-4 mr-2" />
-                  Sign In with API Key
-                </>
-              )}
-            </button>
-          </form>
+          </button>
         </div>
       )}
 
