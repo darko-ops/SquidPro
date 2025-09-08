@@ -1,6 +1,5 @@
 import React from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { useAuth } from '../../App';
 import { apiService } from '../../services/api';
 
 interface HeaderProps {
@@ -9,8 +8,6 @@ interface HeaderProps {
 }
 
 const Header: React.FC<HeaderProps> = ({ currentRoute, navigate }) => {
-  const { user, isAuthenticated } = useAuth();
-
   // Check API health
   const { data: apiHealth } = useQuery({
     queryKey: ['api-health'],
@@ -56,20 +53,8 @@ const Header: React.FC<HeaderProps> = ({ currentRoute, navigate }) => {
             </button>
           </nav>
 
-          {/* Right side - User info and API status */}
+          {/* Right side - API status */}
           <div className="flex items-center space-x-4">
-            {/* User info */}
-            {isAuthenticated && user && (
-              <div className="hidden md:flex items-center space-x-2 text-sm text-gray-600">
-                <div className="flex items-center space-x-1">
-                  <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                  <span>{user.name}</span>
-                </div>
-                <span className="text-gray-400">•</span>
-                <span className="capitalize">{user.type}</span>
-              </div>
-            )}
-
             {/* API Status */}
             <div className="flex items-center space-x-2 text-sm text-gray-500">
               <div
