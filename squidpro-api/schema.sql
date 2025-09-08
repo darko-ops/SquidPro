@@ -1,6 +1,28 @@
 -- SquidPro Database Schema - Compatible with app.py
 -- This creates the tables that your app.py code expects
 
+
+
+CREATE TABLE users (
+    id SERIAL PRIMARY KEY,
+    username VARCHAR(50) UNIQUE NOT NULL,
+    name VARCHAR(255) NOT NULL,
+    email VARCHAR(255) UNIQUE NOT NULL,
+    password_hash VARCHAR(255) NOT NULL,
+    stellar_address VARCHAR(56) NOT NULL,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE user_roles (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER REFERENCES users(id),
+    role_type VARCHAR(20) CHECK (role_type IN ('supplier', 'buyer', 'reviewer')),
+    api_key VARCHAR(64),
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT NOW(),
+    UNIQUE(user_id, role_type)
+);
 -- Core user tables that app.py expects
 CREATE TABLE suppliers (
     id SERIAL PRIMARY KEY,
