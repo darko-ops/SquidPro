@@ -69,11 +69,11 @@ class PIIAction(Enum):
     LOG_ONLY = "log_only"
 
 
-# Add these Pydantic models after your existing models
+# Pydantic models (add these if missing)
 class UserRegistration(BaseModel):
-    username: str = Field(..., min_length=3, max_length=50, regex="^[a-zA-Z0-9_]+$")
+    username: str = Field(..., min_length=3, max_length=50)
     name: str = Field(..., min_length=1, max_length=255)
-    email: str = Field(..., regex="^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$")
+    email: str = Field(..., regex=r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$")
     password: str = Field(..., min_length=8, max_length=128)
     repeat_password: str
     stellar_address: str = Field(..., min_length=56, max_length=56)
@@ -105,6 +105,7 @@ class UserSession(BaseModel):
     roles: List[str]
     api_key: str
     stellar_address: str
+
 # PII Detection Patterns
 PII_PATTERNS = {
     PIIType.EMAIL: {
@@ -145,6 +146,7 @@ PII_PATTERNS = {
 }
 active_sessions = {}
 
+# Helper functions (add these if missing)
 def hash_password(password: str) -> str:
     """Hash password using bcrypt"""
     return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
@@ -2681,98 +2683,304 @@ async def list_uploads(x_api_key: Optional[str] = Header(None)):
             for upload in uploads
         ]
     
+# IMPLEMENTED AUTHENTICATION ENDPOINTS
+
 @api.get("/auth/check-username")
 async def check_username_availability(username: str):
-    """
-    Check if a username is available
-    
-    Query params:
-    - username: The username to check
-    
-    Returns:
-    {
-        "available": true/false,
-        "message": "Username is available" or "Username is taken"
-    }
-    """
-    pass
+    """Check if username is available"""
+    async with db_pool.acquire() as conn:
+        existing = await conn.fetchval(
+            "SELECT username FROM users WHERE username = $1", 
+            username
+        )
+        
+        available = existing is None
+        return {
+            "available": available,
+            "message": "Username is available" if available else "Username is already taken"
+        }
 
-# 2. Email availability check  
 @api.get("/auth/check-email")
 async def check_email_availability(email: str):
-    """
-    Check if an email is already registered
-    
-    Query params:
-    - email: The email to check
-    
-    Returns:
-    {
-        "available": true/false,
-        "message": "Email is available" or "Email is already registered"
-    }
-    """
-    pass
+    """Check if email is available"""
+    async with db_pool.acquire() as conn:
+        existing = await conn.fetchval(
+            "SELECT email FROM users WHERE email = $1", 
+            email
+        )
+        
+        available = existing is None
+        return {
+            "available": available,
+            "message": "Email is available" if available else "Email is already registered"
+        }
 
-# 3. New unified registration endpoint
 @api.post("/auth/register")
 async def register_user(user_data: UserRegistration):
-    """
-    Register a new user with multiple roles
-    
-    Request body:
-    {
-        "username": "johndoe123",
-        "name": "John Doe", 
-        "email": "john@example.com",
-        "password": "securepassword123",
-        "stellar_address": "GDXDSB444...",
-        "roles": {
-            "supplier": true,
-            "buyer": true,
-            "reviewer": false
-        },
-        "reviewer_specializations": ["financial", "crypto"] // optional
-    }
-    
-    Returns:
-    {
-        "user_id": 123,
-        "username": "johndoe123",
-        "api_keys": {
-            "supplier": "sup_abc123...",
-            "reviewer": "rev_def456..." // only if reviewer role selected
-        },
-        "message": "Account created successfully"
-    }
-    """
-    pass
+    """Register a new user with multiple roles"""
+    async with db_pool.acquire() as conn:
+        # Check for existing username
+        existing_username = await conn.fetchval(
+            "SELECT username FROM users WHERE username = $1", 
+            user_data.username
+        )
+        if existing_username:
+            raise HTTPException(status_code=409, detail="Username already taken")
+        
+        # Check for existing email
+        existing_email = await conn.fetchval(
+            "SELECT email FROM users WHERE email = $1", 
+            user_data.email
+        )
+        if existing_email:
+            raise HTTPException(status_code=409, detail="Email already registered")
+        
+        # Hash password
+        password_hash = hash_password(user_data.password)
+        
+        # Generate single API key for all roles
+        api_key = f"usr_{secrets.token_urlsafe(32)}"
+        
+        try:
+            # Start transaction
+            async with conn.transaction():
+                # Create user
+                user_id = await conn.fetchval("""
+                    INSERT INTO users (username, name, email, password_hash, stellar_address)
+                    VALUES ($1, $2, $3, $4, $5)
+                    RETURNING id
+                """, user_data.username, user_data.name, user_data.email, 
+                password_hash, user_data.stellar_address)
+                
+                # Create role entries
+                for role in user_data.roles:
+                    await conn.execute("""
+                        INSERT INTO user_roles (user_id, role_type, api_key)
+                        VALUES ($1, $2, $3)
+                    """, user_id, role, api_key)
+                
+                # Create balance entries for supplier/reviewer roles
+                if 'supplier' in user_data.roles:
+                    await conn.execute("""
+                        INSERT INTO balances (user_type, user_id, payout_threshold_usd)
+                        VALUES ('supplier', $1, 25.00)
+                    """, str(user_id))
+                
+                if 'reviewer' in user_data.roles:
+                    await conn.execute("""
+                        INSERT INTO balances (user_type, user_id, payout_threshold_usd)
+                        VALUES ('reviewer', $1, 5.00)
+                    """, str(user_id))
+                    
+                    # Initialize reviewer stats if reviewer role
+                    await conn.execute("""
+                        INSERT INTO reviewer_stats (reviewer_id) VALUES ($1)
+                    """, user_id)
+                
+                return {
+                    "user_id": user_id,
+                    "username": user_data.username,
+                    "api_key": api_key,
+                    "roles": user_data.roles,
+                    "message": "Account created successfully"
+                }
+                
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Registration failed: {str(e)}")
 
-# 4. Username/password login endpoint
 @api.post("/auth/login")
 async def login_user(credentials: LoginCredentials):
-    """
-    Login with username and password
-    
-    Request body:
-    {
-        "username": "johndoe123",
-        "password": "securepassword123"
-    }
-    
-    Returns:
-    {
-        "user_id": 123,
-        "username": "johndoe123",
-        "api_keys": {
-            "supplier": "sup_abc123...",
-            "reviewer": "rev_def456..."
-        },
-        "roles": {
-            "supplier": true,
-            "buyer": true, 
-            "reviewer": true
+    """Login with username and password"""
+    async with db_pool.acquire() as conn:
+        # Get user data
+        user = await conn.fetchrow("""
+            SELECT u.id, u.username, u.name, u.email, u.password_hash, u.stellar_address
+            FROM users u
+            WHERE u.username = $1
+        """, credentials.username)
+        
+        if not user or not verify_password(credentials.password, user["password_hash"]):
+            raise HTTPException(status_code=401, detail="Invalid username or password")
+        
+        # Get user roles and API key
+        roles_data = await conn.fetch("""
+            SELECT role_type, api_key FROM user_roles 
+            WHERE user_id = $1 AND is_active = TRUE
+        """, user["id"])
+        
+        if not roles_data:
+            raise HTTPException(status_code=401, detail="No active roles found")
+        
+        roles = [role["role_type"] for role in roles_data]
+        api_key = roles_data[0]["api_key"]  # Same API key for all roles
+        
+        # Create session
+        session_token = generate_session_token()
+        session_data = UserSession(
+            user_id=user["id"],
+            username=user["username"],
+            name=user["name"],
+            email=user["email"],
+            roles=roles,
+            api_key=api_key,
+            stellar_address=user["stellar_address"]
+        )
+        
+        # Store session (expires in 24 hours)
+        active_sessions[session_token] = {
+            "data": session_data,
+            "expires_at": datetime.now() + timedelta(hours=24)
         }
-    }
-    """
-    pass
+        
+        return {
+            "session_token": session_token,
+            "user": {
+                "id": user["id"],
+                "username": user["username"],
+                "name": user["name"],
+                "email": user["email"],
+                "roles": roles,
+                "api_key": api_key,
+                "stellar_address": user["stellar_address"]
+            }
+        }
+
+@api.post("/auth/logout")
+async def logout_user(session_token: str = Header(None, alias="Authorization")):
+    """Logout user and invalidate session"""
+    if session_token and session_token in active_sessions:
+        del active_sessions[session_token]
+    
+    return {"message": "Logged out successfully"}
+
+@api.get("/auth/session")
+async def get_session(session_token: str = Header(None, alias="Authorization")):
+    """Get current session data"""
+    if not session_token or session_token not in active_sessions:
+        raise HTTPException(status_code=401, detail="Invalid or expired session")
+    
+    session = active_sessions[session_token]
+    
+    # Check expiration
+    if datetime.now() > session["expires_at"]:
+        del active_sessions[session_token]
+        raise HTTPException(status_code=401, detail="Session expired")
+    
+    return {"user": session["data"]}
+
+# Updated authentication helpers
+async def authenticate_user_session(session_token: str) -> UserSession:
+    """Authenticate user by session token"""
+    if not session_token or session_token not in active_sessions:
+        raise HTTPException(status_code=401, detail="Invalid or expired session")
+    
+    session = active_sessions[session_token]
+    
+    # Check expiration
+    if datetime.now() > session["expires_at"]:
+        del active_sessions[session_token]
+        raise HTTPException(status_code=401, detail="Session expired")
+    
+    return session["data"]
+
+async def authenticate_user_api_key(api_key: str) -> UserSession:
+    """Authenticate user by API key (for programmatic access)"""
+    if not api_key or not api_key.startswith('usr_'):
+        raise HTTPException(status_code=401, detail="Invalid API key")
+    
+    async with db_pool.acquire() as conn:
+        user_data = await conn.fetchrow("""
+            SELECT u.id, u.username, u.name, u.email, u.stellar_address,
+                   ARRAY_AGG(ur.role_type) as roles
+            FROM users u
+            JOIN user_roles ur ON u.id = ur.user_id
+            WHERE ur.api_key = $1 AND ur.is_active = TRUE
+            GROUP BY u.id, u.username, u.name, u.email, u.stellar_address
+        """, api_key)
+        
+        if not user_data:
+            raise HTTPException(status_code=401, detail="Invalid API key")
+        
+        return UserSession(
+            user_id=user_data["id"],
+            username=user_data["username"],
+            name=user_data["name"],
+            email=user_data["email"],
+            roles=user_data["roles"],
+            api_key=api_key,
+            stellar_address=user_data["stellar_address"]
+        )
+
+# Updated profile endpoint
+@api.get("/users/me")
+async def get_user_profile(
+    session_token: str = Header(None, alias="Authorization"),
+    x_api_key: Optional[str] = Header(None)
+):
+    """Get user profile - supports both session and API key auth"""
+    
+    user = None
+    
+    # Try session authentication first
+    if session_token:
+        try:
+            user = await authenticate_user_session(session_token)
+        except HTTPException:
+            pass
+    
+    # Try API key authentication
+    if not user and x_api_key:
+        try:
+            user = await authenticate_user_api_key(x_api_key)
+        except HTTPException:
+            pass
+    
+    if not user:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    
+    # Get additional user data based on roles
+    async with db_pool.acquire() as conn:
+        profile_data = {
+            "id": user.user_id,
+            "username": user.username,
+            "name": user.name,
+            "email": user.email,
+            "roles": user.roles,
+            "api_key": user.api_key,
+            "stellar_address": user.stellar_address
+        }
+        
+        # Add role-specific data
+        if 'supplier' in user.roles:
+            supplier_data = await conn.fetchrow("""
+                SELECT COUNT(dp.id) as package_count, b.balance_usd
+                FROM users u
+                LEFT JOIN data_packages dp ON u.id = dp.supplier_id
+                LEFT JOIN balances b ON u.id::text = b.user_id AND b.user_type = 'supplier'
+                WHERE u.id = $1
+                GROUP BY b.balance_usd
+            """, user.user_id)
+            
+            profile_data["supplier_stats"] = {
+                "package_count": supplier_data["package_count"] if supplier_data else 0,
+                "balance": float(supplier_data["balance_usd"] or 0) if supplier_data else 0
+            }
+        
+        if 'reviewer' in user.roles:
+            reviewer_data = await conn.fetchrow("""
+                SELECT rs.*, b.balance_usd
+                FROM users u
+                LEFT JOIN reviewer_stats rs ON u.id = rs.reviewer_id
+                LEFT JOIN balances b ON u.id::text = b.user_id AND b.user_type = 'reviewer'
+                WHERE u.id = $1
+            """, user.user_id)
+            
+            profile_data["reviewer_stats"] = {
+                "total_reviews": reviewer_data["total_reviews"] if reviewer_data else 0,
+                "consensus_rate": float(reviewer_data["consensus_rate"] or 0) if reviewer_data else 0,
+                "accuracy_score": float(reviewer_data["accuracy_score"] or 0) if reviewer_data else 0,
+                "total_earned": float(reviewer_data["total_earned"] or 0) if reviewer_data else 0,
+                "balance": float(reviewer_data["balance_usd"] or 0) if reviewer_data else 0
+            }
+        
+        return profile_data

@@ -17,12 +17,6 @@ interface CreateAccountProps {
 
 type RegistrationStep = 'basic-info' | 'role-selection' | 'role-details' | 'complete';
 
-interface UserRoles {
-  supplier: boolean;
-  buyer: boolean;
-  reviewer: boolean;
-}
-
 const CreateAccount: React.FC<CreateAccountProps> = ({ onAccountCreated, onSwitchToSignIn }) => {
   const [currentStep, setCurrentStep] = useState<RegistrationStep>('basic-info');
   
@@ -30,19 +24,16 @@ const CreateAccount: React.FC<CreateAccountProps> = ({ onAccountCreated, onSwitc
     // Basic info
     name: '',
     email: '',
-    password: '',
-    confirmPassword: '',
     stellarAddress: '',
     
     // Role selection
     roles: {
-      supplier: false,
       buyer: false,
+      supplier: false,
       reviewer: false
-    } as UserRoles,
+    },
     
     // Role-specific details
-    supplierCategories: '',
     reviewerSpecializations: '',
     
     // State
@@ -53,25 +44,14 @@ const CreateAccount: React.FC<CreateAccountProps> = ({ onAccountCreated, onSwitc
   });
 
   const validateStellarAddress = (address: string): boolean => {
-    // Basic Stellar address validation
     return address.length === 56 && address.startsWith('G');
   };
 
   const handleBasicInfoNext = () => {
-    const { name, email, password, confirmPassword, stellarAddress } = form;
+    const { name, email, stellarAddress } = form;
     
-    if (!name || !email || !password || !stellarAddress) {
+    if (!name || !email || !stellarAddress) {
       setForm(prev => ({ ...prev, error: 'Please fill in all required fields' }));
-      return;
-    }
-    
-    if (password !== confirmPassword) {
-      setForm(prev => ({ ...prev, error: 'Passwords do not match' }));
-      return;
-    }
-    
-    if (password.length < 6) {
-      setForm(prev => ({ ...prev, error: 'Password must be at least 6 characters' }));
       return;
     }
 
@@ -80,7 +60,6 @@ const CreateAccount: React.FC<CreateAccountProps> = ({ onAccountCreated, onSwitc
       return;
     }
 
-    // Basic email validation
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
       setForm(prev => ({ ...prev, error: 'Please enter a valid email address' }));
@@ -101,11 +80,11 @@ const CreateAccount: React.FC<CreateAccountProps> = ({ onAccountCreated, onSwitc
     
     setForm(prev => ({ ...prev, error: '' }));
     
-    // If only buyer is selected, skip role details
-    if (roles.buyer && !roles.supplier && !roles.reviewer) {
-      handleCompleteRegistration();
-    } else {
+    // If reviewer is selected, go to role details for specializations
+    if (roles.reviewer) {
       setCurrentStep('role-details');
+    } else {
+      handleCompleteRegistration();
     }
   };
 
@@ -177,17 +156,22 @@ const CreateAccount: React.FC<CreateAccountProps> = ({ onAccountCreated, onSwitc
       }
 
       if (Object.keys(apiKeys).length === 0) {
-        throw new Error('No accounts were created. Please try again.');
+        // If only buyer role was selected, we don't have registration for that yet
+        // So we'll just show success and let them sign in later
+        setForm(prev => ({ 
+          ...prev, 
+          isLoading: false,
+          success: 'Account information saved! You can now browse the catalog as a buyer.',
+          apiKeys: { buyer: 'buyer_placeholder' } // Placeholder for buyer-only accounts
+        }));
+      } else {
+        setForm(prev => ({ 
+          ...prev, 
+          isLoading: false,
+          apiKeys,
+          success: `Account created successfully! ${registrationResults.join(' and ')}.`
+        }));
       }
-      
-      console.log('Registration complete. API keys:', apiKeys);
-      
-      setForm(prev => ({ 
-        ...prev, 
-        isLoading: false,
-        apiKeys,
-        success: `Account created successfully! ${registrationResults.join(' and ')}.`
-      }));
       
       setCurrentStep('complete');
       
@@ -208,6 +192,16 @@ const CreateAccount: React.FC<CreateAccountProps> = ({ onAccountCreated, onSwitc
     } else {
       setForm(prev => ({ ...prev, error: 'No API keys available. Please try registering again.' }));
     }
+  };
+
+  const handleRoleToggle = (role: keyof typeof form.roles) => {
+    setForm(prev => ({
+      ...prev,
+      roles: {
+        ...prev.roles,
+        [role]: !prev.roles[role]
+      }
+    }));
   };
 
   return (
@@ -240,7 +234,7 @@ const CreateAccount: React.FC<CreateAccountProps> = ({ onAccountCreated, onSwitc
         ))}
       </div>
 
-      {/* Step Content */}
+      {/* Basic Info Step */}
       {currentStep === 'basic-info' && (
         <div className="space-y-6">
           <div className="text-center">
@@ -250,16 +244,15 @@ const CreateAccount: React.FC<CreateAccountProps> = ({ onAccountCreated, onSwitc
 
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Username *</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Name *</label>
               <input
                 type="text"
                 value={form.name}
                 onChange={(e) => setForm(prev => ({ ...prev, name: e.target.value }))}
-                placeholder="Choose a username"
+                placeholder="Your full name"
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 required
               />
-              <p className="text-xs text-gray-500 mt-1">This will be your display name on SquidPro</p>
             </div>
 
             <div>
@@ -275,40 +268,16 @@ const CreateAccount: React.FC<CreateAccountProps> = ({ onAccountCreated, onSwitc
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Password *</label>
-              <input
-                type="password"
-                value={form.password}
-                onChange={(e) => setForm(prev => ({ ...prev, password: e.target.value }))}
-                placeholder="At least 6 characters"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                required
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Confirm Password *</label>
-              <input
-                type="password"
-                value={form.confirmPassword}
-                onChange={(e) => setForm(prev => ({ ...prev, confirmPassword: e.target.value }))}
-                placeholder="Confirm your password"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                required
-              />
-            </div>
-
-            <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Stellar Address *</label>
               <input
                 type="text"
                 value={form.stellarAddress}
                 onChange={(e) => setForm(prev => ({ ...prev, stellarAddress: e.target.value }))}
                 placeholder="GDXDSB444OLNDYOJAVGU3JWQO4BEGQT2..."
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
                 required
               />
-              <p className="text-xs text-gray-500 mt-1">For receiving XLM payments. Must start with 'G' and be 56 characters long.</p>
+              <p className="text-xs text-gray-500 mt-1">For receiving XLM payments</p>
             </div>
           </div>
 
@@ -341,48 +310,22 @@ const CreateAccount: React.FC<CreateAccountProps> = ({ onAccountCreated, onSwitc
         </div>
       )}
 
+      {/* Role Selection Step */}
       {currentStep === 'role-selection' && (
         <div className="space-y-6">
           <div className="text-center">
             <h3 className="text-lg font-medium text-gray-900 mb-2">Choose Your Roles</h3>
-            <p className="text-sm text-gray-600">Select what you want to do on SquidPro (you can choose multiple)</p>
+            <p className="text-sm text-gray-600">Select what you want to do on SquidPro</p>
           </div>
 
           <div className="space-y-4">
-            {/* Supplier Role */}
-            <div className="border border-gray-200 rounded-lg p-4">
-              <label className="flex items-start space-x-3 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={form.roles.supplier}
-                  onChange={(e) => setForm(prev => ({
-                    ...prev,
-                    roles: { ...prev.roles, supplier: e.target.checked }
-                  }))}
-                  className="mt-1 h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                />
-                <div className="flex-1">
-                  <div className="flex items-center mb-2">
-                    <Database className="h-5 w-5 text-blue-600 mr-2" />
-                    <span className="font-medium text-gray-900">Data Supplier</span>
-                  </div>
-                  <p className="text-sm text-gray-600">
-                    Upload and sell your datasets to AI agents. Earn XLM for every query.
-                  </p>
-                </div>
-              </label>
-            </div>
-
             {/* Buyer Role */}
             <div className="border border-gray-200 rounded-lg p-4">
               <label className="flex items-start space-x-3 cursor-pointer">
                 <input
                   type="checkbox"
                   checked={form.roles.buyer}
-                  onChange={(e) => setForm(prev => ({
-                    ...prev,
-                    roles: { ...prev.roles, buyer: e.target.checked }
-                  }))}
+                  onChange={() => handleRoleToggle('buyer')}
                   className="mt-1 h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
                 />
                 <div className="flex-1">
@@ -397,16 +340,34 @@ const CreateAccount: React.FC<CreateAccountProps> = ({ onAccountCreated, onSwitc
               </label>
             </div>
 
+            {/* Supplier Role */}
+            <div className="border border-gray-200 rounded-lg p-4">
+              <label className="flex items-start space-x-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={form.roles.supplier}
+                  onChange={() => handleRoleToggle('supplier')}
+                  className="mt-1 h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                />
+                <div className="flex-1">
+                  <div className="flex items-center mb-2">
+                    <Database className="h-5 w-5 text-blue-600 mr-2" />
+                    <span className="font-medium text-gray-900">Data Supplier</span>
+                  </div>
+                  <p className="text-sm text-gray-600">
+                    Upload and sell your datasets to AI agents. Earn XLM for every query.
+                  </p>
+                </div>
+              </label>
+            </div>
+
             {/* Reviewer Role */}
             <div className="border border-gray-200 rounded-lg p-4">
               <label className="flex items-start space-x-3 cursor-pointer">
                 <input
                   type="checkbox"
                   checked={form.roles.reviewer}
-                  onChange={(e) => setForm(prev => ({
-                    ...prev,
-                    roles: { ...prev.roles, reviewer: e.target.checked }
-                  }))}
+                  onChange={() => handleRoleToggle('reviewer')}
                   className="mt-1 h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
                 />
                 <div className="flex-1">
@@ -448,6 +409,7 @@ const CreateAccount: React.FC<CreateAccountProps> = ({ onAccountCreated, onSwitc
         </div>
       )}
 
+      {/* Role Details Step */}
       {currentStep === 'role-details' && (
         <div className="space-y-6">
           <div className="text-center">
@@ -456,22 +418,6 @@ const CreateAccount: React.FC<CreateAccountProps> = ({ onAccountCreated, onSwitc
           </div>
 
           <div className="space-y-4">
-            {form.roles.supplier && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Supplier Categories (Optional)
-                </label>
-                <input
-                  type="text"
-                  value={form.supplierCategories}
-                  onChange={(e) => setForm(prev => ({ ...prev, supplierCategories: e.target.value }))}
-                  placeholder="financial, crypto, real-estate"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                />
-                <p className="text-xs text-gray-500 mt-1">Comma-separated categories you'll supply</p>
-              </div>
-            )}
-
             {form.roles.reviewer && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -525,6 +471,7 @@ const CreateAccount: React.FC<CreateAccountProps> = ({ onAccountCreated, onSwitc
         </div>
       )}
 
+      {/* Complete Step */}
       {currentStep === 'complete' && (
         <div className="space-y-6">
           <div className="text-center">
@@ -532,7 +479,7 @@ const CreateAccount: React.FC<CreateAccountProps> = ({ onAccountCreated, onSwitc
               <Check className="h-6 w-6 text-green-600" />
             </div>
             <h3 className="text-lg font-medium text-gray-900 mb-2">Account Created Successfully!</h3>
-            <p className="text-sm text-gray-600">Your SquidPro account is now active</p>
+            <p className="text-sm text-gray-600">Welcome to SquidPro</p>
           </div>
 
           {form.success && (
@@ -579,85 +526,6 @@ const CreateAccount: React.FC<CreateAccountProps> = ({ onAccountCreated, onSwitc
               className="text-gray-600 hover:text-gray-900 text-sm"
             >
               Sign in with a different account
-            </button>
-          </div>
-
-          {/* Debug Helper Section */}
-          <div className="mt-6 p-4 bg-yellow-50 border border-yellow-200 rounded-md">
-            <h4 className="font-medium text-yellow-800 mb-2">🔧 Fix Existing Account</h4>
-            <p className="text-sm text-yellow-700 mb-3">
-              If you already have an account but missing reviewer access, click below to register as reviewer:
-            </p>
-            <button
-              onClick={async () => {
-                try {
-                  // Get current auth data
-                  const authData = JSON.parse(localStorage.getItem('squidpro_auth') || '{}');
-                  
-                  if (!authData.apiKeys?.supplier) {
-                    alert('No supplier account found. Please sign in first.');
-                    return;
-                  }
-
-                  console.log('🔧 FIX DEBUG - Starting reviewer registration fix...');
-                  
-                  // Get supplier details
-                  const supplierResponse = await fetch('http://localhost:8100/suppliers/me', {
-                    headers: { 'X-API-Key': authData.apiKeys.supplier }
-                  });
-                  
-                  if (!supplierResponse.ok) {
-                    throw new Error('Failed to get supplier details');
-                  }
-                  
-                  const supplierData = await supplierResponse.json();
-                  console.log('📋 FIX DEBUG - Supplier data:', supplierData);
-                  
-                  // Register as reviewer
-                  const reviewerResponse = await fetch('http://localhost:8100/reviewers/register', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                      name: supplierData.name,
-                      email: supplierData.email,
-                      stellar_address: supplierData.stellar_address,
-                      specializations: ['financial', 'crypto', 'accuracy', 'data-quality']
-                    })
-                  });
-                  
-                  if (!reviewerResponse.ok) {
-                    const error = await reviewerResponse.json();
-                    if (reviewerResponse.status === 409) {
-                      throw new Error(`Already registered as reviewer: ${error.detail || 'Account already exists'}`);
-                    } else {
-                      throw new Error(error.detail || 'Reviewer registration failed');
-                    }
-                  }
-                  
-                  const reviewerData = await reviewerResponse.json();
-                  console.log('✅ FIX DEBUG - Reviewer registered:', reviewerData);
-                  
-                  // Validate the API key
-                  if (!reviewerData.api_key || !reviewerData.api_key.startsWith('rev_')) {
-                    console.error('❌ FIX DEBUG - Invalid reviewer API key:', reviewerData.api_key);
-                    alert(`Warning: Received invalid reviewer API key format: ${reviewerData.api_key?.substring(0, 10)}...`);
-                  }
-                  
-                  // Update localStorage
-                  authData.apiKeys.reviewer = reviewerData.api_key;
-                  localStorage.setItem('squidpro_auth', JSON.stringify(authData));
-                  
-                  console.log('💾 FIX DEBUG - Updated localStorage');
-                  alert(`✅ Success! Reviewer account created.\nAPI Key: ${reviewerData.api_key}\n\nPlease refresh the page to see your reviewer dashboard.`);
-                  
-                } catch (error) {
-                  console.error('❌ FIX DEBUG - Failed:', error);
-                  alert(`❌ Failed to register reviewer: ${(error as Error).message}`);
-                }
-              }}
-              className="w-full bg-yellow-600 text-white py-2 px-4 rounded-md hover:bg-yellow-700 transition-colors text-sm"
-            >
-              🔧 Add Reviewer Access to Existing Account
             </button>
           </div>
         </div>

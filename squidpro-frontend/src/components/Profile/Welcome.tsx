@@ -22,11 +22,14 @@ interface WelcomeProps {
 const Welcome: React.FC<WelcomeProps> = ({ userRoles, onNavigateToRole, onLogout }) => {
   const userName = userRoles.supplier?.name || userRoles.reviewer?.name || 'User';
   
+  // Safely access user roles
+  const safeUserRoles = userRoles || {};
+  
   // Determine available roles
   const availableRoles = [];
-  if (userRoles.supplier || userRoles.reviewer) availableRoles.push('buying'); // Everyone can buy
-  if (userRoles.supplier) availableRoles.push('supplying');
-  if (userRoles.reviewer) availableRoles.push('reviewing');
+  if (safeUserRoles.supplier || safeUserRoles.reviewer) availableRoles.push('buying'); // Everyone can buy
+  if (safeUserRoles.supplier) availableRoles.push('supplying');
+  if (safeUserRoles.reviewer) availableRoles.push('reviewing');
 
   const roleCards = [
     {
@@ -47,7 +50,7 @@ const Welcome: React.FC<WelcomeProps> = ({ userRoles, onNavigateToRole, onLogout
       color: 'bg-green-600',
       hoverColor: 'hover:bg-green-700',
       features: ['Upload Datasets', 'Set Pricing', 'Track Revenue'],
-      available: !!userRoles.supplier
+      available: !!safeUserRoles.supplier
     },
     {
       id: 'reviewing' as const,
@@ -57,20 +60,20 @@ const Welcome: React.FC<WelcomeProps> = ({ userRoles, onNavigateToRole, onLogout
       color: 'bg-purple-600',
       hoverColor: 'hover:bg-purple-700',
       features: ['Review Tasks', 'Earn Rewards', 'Build Reputation'],
-      available: !!userRoles.reviewer
+      available: !!safeUserRoles.reviewer
     }
   ];
 
   // Quick stats
-  const supplierStats = userRoles.supplier ? {
-    balance: userRoles.supplier.balance || 0,
-    packages: userRoles.supplier.package_count || 0
+  const supplierStats = safeUserRoles.supplier ? {
+    balance: safeUserRoles.supplier.balance || 0,
+    packages: safeUserRoles.supplier.package_count || 0
   } : null;
 
-  const reviewerStats = userRoles.reviewer ? {
-    balance: userRoles.reviewer.balance || 0,
-    reviews: userRoles.reviewer.stats?.total_reviews || 0,
-    reputation: userRoles.reviewer.reputation_level || 'Novice'
+  const reviewerStats = safeUserRoles.reviewer ? {
+    balance: safeUserRoles.reviewer.balance || 0,
+    reviews: safeUserRoles.reviewer.stats?.total_reviews || 0,
+    reputation: safeUserRoles.reviewer.reputation_level || 'Novice'
   } : null;
 
   return (
@@ -207,7 +210,7 @@ const Welcome: React.FC<WelcomeProps> = ({ userRoles, onNavigateToRole, onLogout
               Browse Data Catalog
             </button>
             
-            {userRoles.supplier && (
+            {safeUserRoles.supplier && (
               <button
                 onClick={() => onNavigateToRole('supplying')}
                 className="bg-green-50 hover:bg-green-100 border border-green-200 text-green-800 py-3 px-4 rounded-md transition-colors font-medium flex items-center justify-center"
@@ -217,7 +220,7 @@ const Welcome: React.FC<WelcomeProps> = ({ userRoles, onNavigateToRole, onLogout
               </button>
             )}
             
-            {userRoles.reviewer && (
+            {safeUserRoles.reviewer && (
               <button
                 onClick={() => onNavigateToRole('reviewing')}
                 className="bg-purple-50 hover:bg-purple-100 border border-purple-200 text-purple-800 py-3 px-4 rounded-md transition-colors font-medium flex items-center justify-center"
@@ -235,7 +238,7 @@ const Welcome: React.FC<WelcomeProps> = ({ userRoles, onNavigateToRole, onLogout
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
             <div>
               <span className="text-gray-600">Email:</span>
-              <span className="ml-2 text-gray-900">{safeUserRoles.supplier?.email || safeUserRoles.reviewer?.email}</span>
+              <span className="ml-2 text-gray-900">{safeUserRoles.supplier?.email || safeUserRoles.reviewer?.email || 'Not available'}</span>
             </div>
             <div>
               <span className="text-gray-600">Stellar Address:</span>
@@ -246,7 +249,7 @@ const Welcome: React.FC<WelcomeProps> = ({ userRoles, onNavigateToRole, onLogout
             <div>
               <span className="text-gray-600">Member Since:</span>
               <span className="ml-2 text-gray-900">
-                {new Date(safeUserRoles.supplier?.created_at || safeUserRoles.reviewer?.created_at).toLocaleDateString()}
+                {new Date(safeUserRoles.supplier?.created_at || safeUserRoles.reviewer?.created_at || Date.now()).toLocaleDateString()}
               </span>
             </div>
           </div>
