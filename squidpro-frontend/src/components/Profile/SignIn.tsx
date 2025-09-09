@@ -1,590 +1,255 @@
 import React, { useState } from 'react';
 import { 
-  ChevronRight, 
-  ChevronLeft,
-  Database,
-  ShoppingCart,
-  Shield,
-  Check,
+  Key, 
+  User, 
   Loader,
-  AlertCircle
+  AlertCircle,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 
-interface CreateAccountProps {
-  onAccountCreated: (apiKeys: Record<string, string>) => void;
-  onSwitchToSignIn: () => void;
+interface SignInProps {
+  onSignInSuccess: (apiKeys: Record<string, string>) => void;
+  onSwitchToCreateAccount: () => void;
 }
 
-type RegistrationStep = 'basic-info' | 'role-selection' | 'role-details' | 'complete';
-
-interface UserRoles {
-  supplier: boolean;
-  buyer: boolean;
-  reviewer: boolean;
-}
-
-const CreateAccount: React.FC<CreateAccountProps> = ({ onAccountCreated, onSwitchToSignIn }) => {
-  const [currentStep, setCurrentStep] = useState<RegistrationStep>('basic-info');
-  
+const SignIn: React.FC<SignInProps> = ({ onSignInSuccess, onSwitchToCreateAccount }) => {
   const [form, setForm] = useState({
-    // Basic info
-    name: '',
-    email: '',
-    password: '',
-    confirmPassword: '',
-    stellarAddress: '',
-    
-    // Role selection
-    roles: {
-      supplier: false,
-      buyer: false,
-      reviewer: false
-    } as UserRoles,
-    
-    // Role-specific details
-    supplierCategories: '',
-    reviewerSpecializations: '',
-    
-    // State
+    apiKey: '',
     isLoading: false,
     error: '',
-    success: '',
-    apiKeys: {} as Record<string, string>
+    showApiKey: false
   });
 
-  const validateStellarAddress = (address: string): boolean => {
-    // Basic Stellar address validation
-    return address.length === 56 && address.startsWith('G');
-  };
-
-  const handleBasicInfoNext = () => {
-    const { name, email, password, confirmPassword, stellarAddress } = form;
+  const handleApiKeySignIn = async (e: React.FormEvent) => {
+    e.preventDefault();
     
-    if (!name || !email || !password || !stellarAddress) {
-      setForm(prev => ({ ...prev, error: 'Please fill in all required fields' }));
-      return;
-    }
-    
-    if (password !== confirmPassword) {
-      setForm(prev => ({ ...prev, error: 'Passwords do not match' }));
-      return;
-    }
-    
-    if (password.length < 6) {
-      setForm(prev => ({ ...prev, error: 'Password must be at least 6 characters' }));
+    if (!form.apiKey) {
+      setForm(prev => ({ ...prev, error: 'Please enter your API key' }));
       return;
     }
 
-    if (!validateStellarAddress(stellarAddress)) {
-      setForm(prev => ({ ...prev, error: 'Please enter a valid Stellar address (starts with G, 56 characters)' }));
-      return;
-    }
-
-    // Basic email validation
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      setForm(prev => ({ ...prev, error: 'Please enter a valid email address' }));
-      return;
-    }
-    
-    setForm(prev => ({ ...prev, error: '' }));
-    setCurrentStep('role-selection');
-  };
-
-  const handleRoleSelectionNext = () => {
-    const { roles } = form;
-    
-    if (!roles.supplier && !roles.buyer && !roles.reviewer) {
-      setForm(prev => ({ ...prev, error: 'Please select at least one role' }));
-      return;
-    }
-    
-    setForm(prev => ({ ...prev, error: '' }));
-    
-    // If only buyer is selected, skip role details
-    if (roles.buyer && !roles.supplier && !roles.reviewer) {
-      handleCompleteRegistration();
-    } else {
-      setCurrentStep('role-details');
-    }
-  };
-
-  const handleCompleteRegistration = async () => {
     setForm(prev => ({ ...prev, isLoading: true, error: '' }));
 
     try {
-      const { roles } = form;
-      const apiKeys: Record<string, string> = {};
-      const registrationResults: string[] = [];
+      // Determine API key type and test it
+      let apiKeys: Record<string, string> = {};
+      let userType = '';
       
-      // Register as supplier if selected
-      if (roles.supplier) {
-        try {
-          console.log('Registering supplier...');
-          const supplierResponse = await fetch('http://localhost:8100/suppliers/register', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              name: form.name,
-              email: form.email,
-              stellar_address: form.stellarAddress
-            })
-          });
-          
-          if (supplierResponse.ok) {
-            const data = await supplierResponse.json();
-            console.log('Supplier registration response:', data);
-            apiKeys.supplier = data.api_key;
-            registrationResults.push('Supplier account created');
-          } else {
-            const errorData = await supplierResponse.json();
-            throw new Error(`Supplier registration failed: ${errorData.detail || 'Unknown error'}`);
-          }
-        } catch (error) {
-          console.error('Supplier registration error:', error);
-          throw new Error(`Failed to create supplier account: ${(error as Error).message}`);
+      if (form.apiKey.startsWith('sup_')) {
+        console.log('Testing supplier API key...');
+        const response = await fetch('http://localhost:8100/suppliers/me', {
+          headers: { 'X-API-Key': form.apiKey }
+        });
+        
+        if (response.ok) {
+          apiKeys.supplier = form.apiKey;
+          userType = 'supplier';
+          console.log('Supplier API key valid');
+        } else {
+          throw new Error('Invalid supplier API key');
         }
+      } else if (form.apiKey.startsWith('rev_')) {
+        console.log('Testing reviewer API key...');
+        const response = await fetch('http://localhost:8100/reviewers/me', {
+          headers: { 'X-API-Key': form.apiKey }
+        });
+        
+        if (response.ok) {
+          apiKeys.reviewer = form.apiKey;
+          userType = 'reviewer';
+          console.log('Reviewer API key valid');
+        } else {
+          throw new Error('Invalid reviewer API key');
+        }
+      } else {
+        throw new Error('Invalid API key format. Must start with "sup_" or "rev_"');
       }
-      
-      // Register as reviewer if selected
-      if (roles.reviewer) {
-        try {
-          console.log('Registering reviewer...');
-          const reviewerResponse = await fetch('http://localhost:8100/reviewers/register', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              name: form.name,
-              email: form.email,
-              stellar_address: form.stellarAddress,
-              specializations: form.reviewerSpecializations.split(',').map(s => s.trim()).filter(s => s)
-            })
-          });
+
+      // Check if user has additional roles by trying to find accounts with same email
+      if (userType === 'supplier') {
+        console.log('Checking for additional reviewer access...');
+        // Get supplier data first
+        const supplierResponse = await fetch('http://localhost:8100/suppliers/me', {
+          headers: { 'X-API-Key': form.apiKey }
+        });
+        
+        if (supplierResponse.ok) {
+          const supplierData = await supplierResponse.json();
           
-          if (reviewerResponse.ok) {
-            const data = await reviewerResponse.json();
-            console.log('Reviewer registration response:', data);
-            apiKeys.reviewer = data.api_key;
-            registrationResults.push('Reviewer account created');
-          } else {
-            const errorData = await reviewerResponse.json();
-            throw new Error(`Reviewer registration failed: ${errorData.detail || 'Unknown error'}`);
+          // Try to register as reviewer with same details to get reviewer API key
+          // (This is a bit of a hack - ideally we'd have a better way to link accounts)
+          try {
+            const reviewerResponse = await fetch('http://localhost:8100/reviewers/register', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                name: supplierData.name,
+                email: supplierData.email,
+                stellar_address: supplierData.stellar_address,
+                specializations: ['data-quality', 'general']
+              })
+            });
+            
+            if (reviewerResponse.ok) {
+              const reviewerData = await reviewerResponse.json();
+              apiKeys.reviewer = reviewerData.api_key;
+              console.log('Also registered as reviewer');
+            } else if (reviewerResponse.status === 409) {
+              console.log('Reviewer account already exists for this user');
+              // Could implement API to get reviewer API key by email here
+            }
+          } catch (error) {
+            console.log('Could not register reviewer account:', error);
           }
-        } catch (error) {
-          console.error('Reviewer registration error:', error);
-          throw new Error(`Failed to create reviewer account: ${(error as Error).message}`);
+        }
+      } else if (userType === 'reviewer') {
+        console.log('Checking for additional supplier access...');
+        // Get reviewer data first
+        const reviewerResponse = await fetch('http://localhost:8100/reviewers/me', {
+          headers: { 'X-API-Key': form.apiKey }
+        });
+        
+        if (reviewerResponse.ok) {
+          const reviewerData = await reviewerResponse.json();
+          
+          // Try to register as supplier with same details
+          try {
+            const supplierResponse = await fetch('http://localhost:8100/suppliers/register', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                name: reviewerData.name,
+                email: reviewerData.email,
+                stellar_address: reviewerData.stellar_address
+              })
+            });
+            
+            if (supplierResponse.ok) {
+              const supplierData = await supplierResponse.json();
+              apiKeys.supplier = supplierData.api_key;
+              console.log('Also registered as supplier');
+            } else if (supplierResponse.status === 409) {
+              console.log('Supplier account already exists for this user');
+              // Could implement API to get supplier API key by email here
+            }
+          } catch (error) {
+            console.log('Could not register supplier account:', error);
+          }
         }
       }
 
-      if (Object.keys(apiKeys).length === 0) {
-        throw new Error('No accounts were created. Please try again.');
-      }
-      
-      console.log('Registration complete. API keys:', apiKeys);
-      
-      setForm(prev => ({ 
-        ...prev, 
-        isLoading: false,
-        apiKeys,
-        success: `Account created successfully! ${registrationResults.join(' and ')}.`
-      }));
-      
-      setCurrentStep('complete');
+      console.log('Sign in successful with API keys:', apiKeys);
+      onSignInSuccess(apiKeys);
       
     } catch (error) {
-      console.error('Registration error:', error);
+      console.error('Sign in failed:', error);
       setForm(prev => ({ 
         ...prev, 
-        isLoading: false, 
         error: (error as Error).message 
       }));
-    }
-  };
-
-  const handleLoginWithNewAccount = () => {
-    console.log('Logging in with new account API keys:', form.apiKeys);
-    if (Object.keys(form.apiKeys).length > 0) {
-      onAccountCreated(form.apiKeys);
-    } else {
-      setForm(prev => ({ ...prev, error: 'No API keys available. Please try registering again.' }));
+    } finally {
+      setForm(prev => ({ ...prev, isLoading: false }));
     }
   };
 
   return (
     <div className="space-y-6">
-      {/* Step Indicator */}
-      <div className="flex items-center justify-center space-x-4 mb-8">
-        {['basic-info', 'role-selection', 'role-details', 'complete'].map((step, index) => (
-          <div key={step} className="flex items-center">
-            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
-              currentStep === step 
-                ? 'bg-blue-600 text-white' 
-                : index < ['basic-info', 'role-selection', 'role-details', 'complete'].indexOf(currentStep)
-                ? 'bg-green-600 text-white'
-                : 'bg-gray-200 text-gray-600'
-            }`}>
-              {index < ['basic-info', 'role-selection', 'role-details', 'complete'].indexOf(currentStep) ? (
-                <Check className="w-4 h-4" />
-              ) : (
-                index + 1
-              )}
-            </div>
-            {index < 3 && (
-              <div className={`w-12 h-0.5 ${
-                index < ['basic-info', 'role-selection', 'role-details', 'complete'].indexOf(currentStep)
-                  ? 'bg-green-600'
-                  : 'bg-gray-200'
-              }`} />
-            )}
+      {/* API Key Sign In */}
+      <form onSubmit={handleApiKeySignIn} className="space-y-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            <Key className="w-4 h-4 inline mr-2" />
+            API Key
+          </label>
+          <div className="relative">
+            <input
+              type={form.showApiKey ? 'text' : 'password'}
+              value={form.apiKey}
+              onChange={(e) => setForm(prev => ({ ...prev, apiKey: e.target.value }))}
+              placeholder="sup_... or rev_..."
+              className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
+              required
+            />
+            <button
+              type="button"
+              onClick={() => setForm(prev => ({ ...prev, showApiKey: !prev.showApiKey }))}
+              className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
+            >
+              {form.showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            </button>
           </div>
-        ))}
+          <p className="text-xs text-gray-500 mt-1">
+            Enter your SquidPro API key to access your account
+          </p>
+        </div>
+
+        {form.error && (
+          <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-md text-sm flex items-start">
+            <AlertCircle className="h-4 w-4 mr-2 mt-0.5 flex-shrink-0" />
+            {form.error}
+          </div>
+        )}
+
+        <button
+          type="submit"
+          disabled={form.isLoading}
+          className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 disabled:opacity-50 transition-colors flex items-center justify-center"
+        >
+          {form.isLoading ? (
+            <>
+              <Loader className="animate-spin h-4 w-4 mr-2" />
+              Signing in...
+            </>
+          ) : (
+            <>
+              <User className="h-4 w-4 mr-2" />
+              Sign In
+            </>
+          )}
+        </button>
+      </form>
+
+      {/* Create Account Link */}
+      <div className="text-center">
+        <p className="text-sm text-gray-600">
+          Don't have an account?{' '}
+          <button
+            onClick={onSwitchToCreateAccount}
+            className="text-blue-600 hover:text-blue-700 font-medium"
+          >
+            Create one here
+          </button>
+        </p>
       </div>
 
-      {/* Step Content */}
-      {currentStep === 'basic-info' && (
-        <div className="space-y-6">
-          <div className="text-center">
-            <h3 className="text-lg font-medium text-gray-900 mb-2">Basic Information</h3>
-            <p className="text-sm text-gray-600">Tell us about yourself</p>
-          </div>
+      {/* Help Section */}
+      <div className="bg-gray-50 border border-gray-200 rounded-md p-4">
+        <h4 className="font-medium text-gray-900 mb-2">API Key Format</h4>
+        <div className="text-sm text-gray-600 space-y-1">
+          <p>• <strong>Supplier API Key:</strong> Starts with "sup_" - for data providers</p>
+          <p>• <strong>Reviewer API Key:</strong> Starts with "rev_" - for quality reviewers</p>
+          <p>• Your API key was provided when you registered your account</p>
+        </div>
+      </div>
 
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Username *</label>
-              <input
-                type="text"
-                value={form.name}
-                onChange={(e) => setForm(prev => ({ ...prev, name: e.target.value }))}
-                placeholder="Choose a username"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                required
-              />
-              <p className="text-xs text-gray-500 mt-1">This will be your display name on SquidPro</p>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Email Address *</label>
-              <input
-                type="email"
-                value={form.email}
-                onChange={(e) => setForm(prev => ({ ...prev, email: e.target.value }))}
-                placeholder="your@email.com"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                required
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Password *</label>
-              <input
-                type="password"
-                value={form.password}
-                onChange={(e) => setForm(prev => ({ ...prev, password: e.target.value }))}
-                placeholder="At least 6 characters"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                required
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Confirm Password *</label>
-              <input
-                type="password"
-                value={form.confirmPassword}
-                onChange={(e) => setForm(prev => ({ ...prev, confirmPassword: e.target.value }))}
-                placeholder="Confirm your password"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                required
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Stellar Address *</label>
-              <input
-                type="text"
-                value={form.stellarAddress}
-                onChange={(e) => setForm(prev => ({ ...prev, stellarAddress: e.target.value }))}
-                placeholder="GDXDSB444OLNDYOJAVGU3JWQO4BEGQT2..."
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                required
-              />
-              <p className="text-xs text-gray-500 mt-1">For receiving XLM payments. Must start with 'G' and be 56 characters long.</p>
-            </div>
-          </div>
-
-          {form.error && (
-            <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-md text-sm flex items-start">
-              <AlertCircle className="h-4 w-4 mr-2 mt-0.5 flex-shrink-0" />
-              {form.error}
-            </div>
-          )}
-
-          <button
-            onClick={handleBasicInfoNext}
-            className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 transition-colors flex items-center justify-center"
-          >
-            Next: Choose Your Roles
-            <ChevronRight className="h-4 w-4 ml-2" />
-          </button>
-
-          <div className="text-center">
-            <p className="text-sm text-gray-600">
-              Already have an account?{' '}
-              <button
-                onClick={onSwitchToSignIn}
-                className="text-blue-600 hover:text-blue-700 font-medium"
-              >
-                Sign in here
-              </button>
-            </p>
+      {/* Demo Section */}
+      <div className="bg-blue-50 border border-blue-200 rounded-md p-4">
+        <h4 className="font-medium text-blue-900 mb-2">Test the System</h4>
+        <p className="text-sm text-blue-700 mb-3">
+          Create a new account above to get your API keys, or browse the catalog without signing in.
+        </p>
+        <div className="space-y-2">
+          <div className="bg-white border border-blue-200 rounded p-2 text-xs">
+            <strong>After creating an account:</strong><br/>
+            • Copy your API key from the success screen<br/>
+            • Return here and paste it to sign in<br/>
+            • Access your personalized dashboard
           </div>
         </div>
-      )}
-
-      {currentStep === 'role-selection' && (
-        <div className="space-y-6">
-          <div className="text-center">
-            <h3 className="text-lg font-medium text-gray-900 mb-2">Choose Your Roles</h3>
-            <p className="text-sm text-gray-600">Select what you want to do on SquidPro (you can choose multiple)</p>
-          </div>
-
-          <div className="space-y-4">
-            {/* Supplier Role */}
-            <div className="border border-gray-200 rounded-lg p-4">
-              <label className="flex items-start space-x-3 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={form.roles.supplier}
-                  onChange={(e) => setForm(prev => ({
-                    ...prev,
-                    roles: { ...prev.roles, supplier: e.target.checked }
-                  }))}
-                  className="mt-1 h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                />
-                <div className="flex-1">
-                  <div className="flex items-center mb-2">
-                    <Database className="h-5 w-5 text-blue-600 mr-2" />
-                    <span className="font-medium text-gray-900">Data Supplier</span>
-                  </div>
-                  <p className="text-sm text-gray-600">
-                    Upload and sell your datasets to AI agents. Earn XLM for every query.
-                  </p>
-                </div>
-              </label>
-            </div>
-
-            {/* Buyer Role */}
-            <div className="border border-gray-200 rounded-lg p-4">
-              <label className="flex items-start space-x-3 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={form.roles.buyer}
-                  onChange={(e) => setForm(prev => ({
-                    ...prev,
-                    roles: { ...prev.roles, buyer: e.target.checked }
-                  }))}
-                  className="mt-1 h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                />
-                <div className="flex-1">
-                  <div className="flex items-center mb-2">
-                    <ShoppingCart className="h-5 w-5 text-green-600 mr-2" />
-                    <span className="font-medium text-gray-900">Data Buyer</span>
-                  </div>
-                  <p className="text-sm text-gray-600">
-                    Purchase high-quality data for your AI agents and applications.
-                  </p>
-                </div>
-              </label>
-            </div>
-
-            {/* Reviewer Role */}
-            <div className="border border-gray-200 rounded-lg p-4">
-              <label className="flex items-start space-x-3 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={form.roles.reviewer}
-                  onChange={(e) => setForm(prev => ({
-                    ...prev,
-                    roles: { ...prev.roles, reviewer: e.target.checked }
-                  }))}
-                  className="mt-1 h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                />
-                <div className="flex-1">
-                  <div className="flex items-center mb-2">
-                    <Shield className="h-5 w-5 text-purple-600 mr-2" />
-                    <span className="font-medium text-gray-900">Quality Reviewer</span>
-                  </div>
-                  <p className="text-sm text-gray-600">
-                    Review data quality and earn XLM rewards for maintaining platform standards.
-                  </p>
-                </div>
-              </label>
-            </div>
-          </div>
-
-          {form.error && (
-            <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-md text-sm flex items-start">
-              <AlertCircle className="h-4 w-4 mr-2 mt-0.5 flex-shrink-0" />
-              {form.error}
-            </div>
-          )}
-
-          <div className="flex space-x-3">
-            <button
-              onClick={() => setCurrentStep('basic-info')}
-              className="flex-1 bg-gray-100 text-gray-700 py-2 px-4 rounded-md hover:bg-gray-200 transition-colors flex items-center justify-center"
-            >
-              <ChevronLeft className="h-4 w-4 mr-2" />
-              Back
-            </button>
-            <button
-              onClick={handleRoleSelectionNext}
-              className="flex-1 bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 transition-colors flex items-center justify-center"
-            >
-              Next
-              <ChevronRight className="h-4 w-4 ml-2" />
-            </button>
-          </div>
-        </div>
-      )}
-
-      {currentStep === 'role-details' && (
-        <div className="space-y-6">
-          <div className="text-center">
-            <h3 className="text-lg font-medium text-gray-900 mb-2">Role Details</h3>
-            <p className="text-sm text-gray-600">Additional information for your selected roles</p>
-          </div>
-
-          <div className="space-y-4">
-            {form.roles.supplier && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Supplier Categories (Optional)
-                </label>
-                <input
-                  type="text"
-                  value={form.supplierCategories}
-                  onChange={(e) => setForm(prev => ({ ...prev, supplierCategories: e.target.value }))}
-                  placeholder="financial, crypto, real-estate"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                />
-                <p className="text-xs text-gray-500 mt-1">Comma-separated categories you'll supply</p>
-              </div>
-            )}
-
-            {form.roles.reviewer && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Review Specializations
-                </label>
-                <input
-                  type="text"
-                  value={form.reviewerSpecializations}
-                  onChange={(e) => setForm(prev => ({ ...prev, reviewerSpecializations: e.target.value }))}
-                  placeholder="financial, crypto, real-time, accuracy"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                />
-                <p className="text-xs text-gray-500 mt-1">Comma-separated areas of expertise</p>
-              </div>
-            )}
-          </div>
-
-          {form.error && (
-            <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-md text-sm flex items-start">
-              <AlertCircle className="h-4 w-4 mr-2 mt-0.5 flex-shrink-0" />
-              {form.error}
-            </div>
-          )}
-
-          <div className="flex space-x-3">
-            <button
-              onClick={() => setCurrentStep('role-selection')}
-              className="flex-1 bg-gray-100 text-gray-700 py-2 px-4 rounded-md hover:bg-gray-200 transition-colors flex items-center justify-center"
-            >
-              <ChevronLeft className="h-4 w-4 mr-2" />
-              Back
-            </button>
-            <button
-              onClick={handleCompleteRegistration}
-              disabled={form.isLoading}
-              className="flex-1 bg-green-600 text-white py-2 px-4 rounded-md hover:bg-green-700 disabled:opacity-50 transition-colors flex items-center justify-center"
-            >
-              {form.isLoading ? (
-                <>
-                  <Loader className="animate-spin h-4 w-4 mr-2" />
-                  Creating Account...
-                </>
-              ) : (
-                <>
-                  <Check className="h-4 w-4 mr-2" />
-                  Create Account
-                </>
-              )}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {currentStep === 'complete' && (
-        <div className="space-y-6">
-          <div className="text-center">
-            <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-green-100 mb-4">
-              <Check className="h-6 w-6 text-green-600" />
-            </div>
-            <h3 className="text-lg font-medium text-gray-900 mb-2">Account Created Successfully!</h3>
-            <p className="text-sm text-gray-600">Your SquidPro account is now active</p>
-          </div>
-
-          {form.success && (
-            <div className="bg-green-50 border border-green-200 text-green-600 px-4 py-3 rounded-md text-sm">
-              {form.success}
-            </div>
-          )}
-
-          <div className="space-y-3">
-            <h4 className="text-sm font-medium text-gray-900">Your API Keys:</h4>
-            {Object.entries(form.apiKeys).map(([role, apiKey]) => (
-              <div key={role} className="bg-gray-50 border border-gray-200 rounded-md p-3">
-                <div className="flex justify-between items-center mb-2">
-                  <span className="text-sm font-medium text-gray-700 capitalize">{role} API Key:</span>
-                </div>
-                <code className="text-xs text-gray-600 break-all block mb-2">{apiKey}</code>
-              </div>
-            ))}
-          </div>
-
-          <div className="bg-blue-50 border border-blue-200 rounded-md p-4">
-            <p className="text-sm text-blue-800">
-              <strong>Important:</strong> Save your API keys securely. You'll need them to access your account features.
-            </p>
-          </div>
-
-          {form.error && (
-            <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-md text-sm flex items-start">
-              <AlertCircle className="h-4 w-4 mr-2 mt-0.5 flex-shrink-0" />
-              {form.error}
-            </div>
-          )}
-
-          <button
-            onClick={handleLoginWithNewAccount}
-            className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 transition-colors"
-          >
-            Continue to Dashboard
-          </button>
-
-          <div className="text-center">
-            <button
-              onClick={onSwitchToSignIn}
-              className="text-gray-600 hover:text-gray-900 text-sm"
-            >
-              Sign in with a different account
-            </button>
-          </div>
-        </div>
-      )}
+      </div>
     </div>
   );
 };
 
-export default CreateAccount;
+export default SignIn;

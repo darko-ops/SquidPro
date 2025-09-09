@@ -15,7 +15,11 @@ const queryClient = new QueryClient({
     },
   },
 });
-
+const handleAccountCreated = (authData: { sessionToken: string; user: any }) => {
+    console.log('Account created with session data:', authData);
+    // Use session-based login
+    login(authData);
+  };
 function App() {
   const [currentRoute, setCurrentRoute] = useState<Route>('catalog');
 

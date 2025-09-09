@@ -1,6 +1,7 @@
 // useAuth.ts - Custom React hook for SquidPro authentication
 
 import { useState, useEffect, useCallback } from 'react';
+// Fix: Import from the correct location
 import { 
   User, 
   LoginCredentials, 
@@ -10,7 +11,7 @@ import {
   ValidationResponse,
   UseAuthReturn,
   UserRole 
-} from './auth.types';
+} from '../../context/auth.types';
 
 const API_BASE = 'http://localhost:8100';
 const SESSION_KEY = 'squidpro_session';

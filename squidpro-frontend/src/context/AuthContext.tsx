@@ -4,11 +4,13 @@ interface AuthState {
   isAuthenticated: boolean;
   apiKeys: Record<string, string>;
   userRoles: Record<string, any>;
+  sessionToken?: string;
+  user?: any;
 }
 
 interface AuthContextType {
   authState: AuthState;
-  login: (apiKeys: Record<string, string>) => void;
+  login: (authData: Record<string, string> | { sessionToken: string; user: any }) => void;
   logout: () => void;
   updateUserRoles: (userRoles: Record<string, any>) => void;
   isLoading: boolean;
@@ -54,10 +56,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   }, []);
 
   // Save authentication state to localStorage whenever it changes
-  // But only when not loading and when we have meaningful auth data
   useEffect(() => {
     if (!isLoading) {
-      if (authState.isAuthenticated && Object.keys(authState.apiKeys).length > 0) {
+      if (authState.isAuthenticated && (Object.keys(authState.apiKeys).length > 0 || authState.sessionToken)) {
         console.log('Saving auth state to localStorage:', authState);
         try {
           localStorage.setItem('squidpro_auth', JSON.stringify(authState));
@@ -69,17 +70,37 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         localStorage.removeItem('squidpro_auth');
       }
     }
-  }, [authState.isAuthenticated, authState.apiKeys, isLoading]);
+  }, [authState.isAuthenticated, authState.apiKeys, authState.sessionToken, isLoading]);
 
-  // Memoize the functions to prevent infinite loops
-  const login = useCallback((apiKeys: Record<string, string>) => {
-    console.log('AuthContext: Logging in with API keys:', apiKeys);
-    setAuthState(prev => ({
-      ...prev,
-      isAuthenticated: true,
-      apiKeys,
-      userRoles: {} // Reset user roles, they'll be loaded fresh
-    }));
+  // Login function - handles both API keys and session tokens
+  const login = useCallback((authData: Record<string, string> | { sessionToken: string; user: any }) => {
+    console.log('AuthContext: Logging in with auth data:', authData);
+    
+    // Check if this is session-based auth
+    if ('sessionToken' in authData && 'user' in authData) {
+      console.log('Session-based login');
+      setAuthState(prev => ({
+        ...prev,
+        isAuthenticated: true,
+        sessionToken: authData.sessionToken,
+        user: authData.user,
+        apiKeys: {
+          session: authData.sessionToken,
+          // Include the user's API key if available
+          ...(authData.user.api_key ? { unified: authData.user.api_key } : {})
+        },
+        userRoles: {} // Will be loaded later
+      }));
+    } else {
+      // Legacy API key login
+      console.log('API key-based login');
+      setAuthState(prev => ({
+        ...prev,
+        isAuthenticated: true,
+        apiKeys: authData as Record<string, string>,
+        userRoles: {} // Reset user roles, they'll be loaded fresh
+      }));
+    }
   }, []);
 
   const logout = useCallback(() => {
