@@ -2,15 +2,14 @@ import React, { createContext, useContext, useState, useEffect, useCallback, Rea
 
 interface AuthState {
   isAuthenticated: boolean;
-  apiKeys: Record<string, string>;
-  userRoles: Record<string, any>;
   sessionToken?: string;
   user?: any;
+  userRoles: Record<string, any>;
 }
 
 interface AuthContextType {
   authState: AuthState;
-  login: (authData: Record<string, string> | { sessionToken: string; user: any }) => void;
+  login: (authData: { sessionToken: string; user: any }) => void;
   logout: () => void;
   updateUserRoles: (userRoles: Record<string, any>) => void;
   isLoading: boolean;
@@ -34,83 +33,110 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [authState, setAuthState] = useState<AuthState>({
     isAuthenticated: false,
-    apiKeys: {},
     userRoles: {}
   });
 
   // Load authentication state from localStorage on mount
   useEffect(() => {
     try {
-      const savedAuthState = localStorage.getItem('squidpro_auth');
-      if (savedAuthState) {
-        const parsedAuthState = JSON.parse(savedAuthState);
-        console.log('Loaded saved auth state:', parsedAuthState);
-        setAuthState(parsedAuthState);
+      const savedSessionToken = localStorage.getItem('squidpro_session_token');
+      const savedUser = localStorage.getItem('squidpro_user');
+      
+      if (savedSessionToken && savedUser) {
+        const parsedUser = JSON.parse(savedUser);
+        console.log('Loaded saved session:', { sessionToken: savedSessionToken, user: parsedUser });
+        
+        setAuthState({
+          isAuthenticated: true,
+          sessionToken: savedSessionToken,
+          user: parsedUser,
+          userRoles: {}
+        });
+        
+        // Validate session with backend
+        validateSession(savedSessionToken);
+      } else {
+        setIsLoading(false);
       }
     } catch (error) {
       console.error('Failed to load saved auth state:', error);
-      localStorage.removeItem('squidpro_auth');
-    } finally {
+      localStorage.removeItem('squidpro_session_token');
+      localStorage.removeItem('squidpro_user');
       setIsLoading(false);
     }
   }, []);
 
-  // Save authentication state to localStorage whenever it changes
-  useEffect(() => {
-    if (!isLoading) {
-      if (authState.isAuthenticated && (Object.keys(authState.apiKeys).length > 0 || authState.sessionToken)) {
-        console.log('Saving auth state to localStorage:', authState);
-        try {
-          localStorage.setItem('squidpro_auth', JSON.stringify(authState));
-        } catch (error) {
-          console.error('Failed to save auth state:', error);
+  // Validate session with backend
+  const validateSession = async (sessionToken: string) => {
+    try {
+      const response = await fetch('http://localhost:8100/auth/session', {
+        headers: {
+          'Authorization': sessionToken
         }
-      } else if (!authState.isAuthenticated) {
-        console.log('Removing auth state from localStorage');
-        localStorage.removeItem('squidpro_auth');
-      }
-    }
-  }, [authState.isAuthenticated, authState.apiKeys, authState.sessionToken, isLoading]);
+      });
 
-  // Login function - handles both API keys and session tokens
-  const login = useCallback((authData: Record<string, string> | { sessionToken: string; user: any }) => {
-    console.log('AuthContext: Logging in with auth data:', authData);
-    
-    // Check if this is session-based auth
-    if ('sessionToken' in authData && 'user' in authData) {
-      console.log('Session-based login');
-      setAuthState(prev => ({
-        ...prev,
-        isAuthenticated: true,
-        sessionToken: authData.sessionToken,
-        user: authData.user,
-        apiKeys: {
-          session: authData.sessionToken,
-          // Include the user's API key if available
-          ...(authData.user.api_key ? { unified: authData.user.api_key } : {})
-        },
-        userRoles: {} // Will be loaded later
-      }));
-    } else {
-      // Legacy API key login
-      console.log('API key-based login');
-      setAuthState(prev => ({
-        ...prev,
-        isAuthenticated: true,
-        apiKeys: authData as Record<string, string>,
-        userRoles: {} // Reset user roles, they'll be loaded fresh
-      }));
+      if (response.ok) {
+        const data = await response.json();
+        console.log('Session validation successful:', data);
+        setAuthState(prev => ({
+          ...prev,
+          user: data.user
+        }));
+      } else {
+        console.warn('Session validation failed, clearing auth state');
+        logout();
+      }
+    } catch (error) {
+      console.error('Session validation error:', error);
+      logout();
+    } finally {
+      setIsLoading(false);
     }
+  };
+
+  // Save authentication state to localStorage
+  const saveAuthState = (sessionToken: string, user: any) => {
+    try {
+      localStorage.setItem('squidpro_session_token', sessionToken);
+      localStorage.setItem('squidpro_user', JSON.stringify(user));
+      console.log('Auth state saved to localStorage');
+    } catch (error) {
+      console.error('Failed to save auth state:', error);
+    }
+  };
+
+  // Clear authentication state from localStorage
+  const clearAuthState = () => {
+    try {
+      localStorage.removeItem('squidpro_session_token');
+      localStorage.removeItem('squidpro_user');
+      console.log('Auth state cleared from localStorage');
+    } catch (error) {
+      console.error('Failed to clear auth state:', error);
+    }
+  };
+
+  // Login function - handles session-based auth
+  const login = useCallback((authData: { sessionToken: string; user: any }) => {
+    console.log('AuthContext: Logging in with session data:', authData);
+    
+    setAuthState({
+      isAuthenticated: true,
+      sessionToken: authData.sessionToken,
+      user: authData.user,
+      userRoles: {} // Will be loaded later
+    });
+    
+    saveAuthState(authData.sessionToken, authData.user);
   }, []);
 
   const logout = useCallback(() => {
     console.log('AuthContext: Logging out');
     setAuthState({
       isAuthenticated: false,
-      apiKeys: {},
       userRoles: {}
     });
-    localStorage.removeItem('squidpro_auth');
+    clearAuthState();
   }, []);
 
   const updateUserRoles = useCallback((userRoles: Record<string, any>) => {
