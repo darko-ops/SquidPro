@@ -1,328 +1,384 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { useAuth } from '../../context/AuthContext';
-import SignIn from './SignIn';
-import CreateAccount from './CreateAccount';
-import Dashboard from './Dashboard';
+import React, { useState } from 'react';
+import { useAuth, useValidation, useRoles, useAuthForm } from './useAuth';
+import { LoginCredentials, UserRegistration, UserRole } from './auth.types';
+import './Profile.css';
 
-interface ProfileProps {
-  onBack: () => void;
-}
-
-type ViewMode = 'signin' | 'register';
-
-const Profile: React.FC<ProfileProps> = ({ onBack }) => {
-  const { authState, login, logout, updateUserRoles, isLoading: authLoading } = useAuth();
-  const [viewMode, setViewMode] = useState<ViewMode>('signin');
+const Profile: React.FC = () => {
+  // Main authentication state
+  const { user, isAuthenticated, isLoading, login, register, logout, error } = useAuth();
   
-  // Use ref to track last updated user roles to prevent infinite loops
-  const lastUserRolesRef = useRef<string>('');
+  // UI state
+  const [authTab, setAuthTab] = useState<'login' | 'register'>('login');
+  const [activeRole, setActiveRole] = useState<UserRole>('buyer');
+  
+  // Role utilities
+  const { hasRole, permissions } = useRoles(user);
+  
+  // Form validation
+  const { usernameState, emailState, validateUsername, validateEmail } = useValidation();
+  
+  // Login form
+  const loginForm = useAuthForm<LoginCredentials>(
+    { username: '', password: '' },
+    login
+  );
 
-  // Debug logging
-  useEffect(() => {
-    console.log('Profile - Auth state updated:', authState);
-  }, [authState]);
-
-  // Fetch user data for all roles when authenticated
-  const { data: userData, isLoading, error, refetch } = useQuery({
-    queryKey: ['unified-user-profile', authState.apiKeys],
-    queryFn: async () => {
-      console.log('🔍 FETCH DEBUG - Starting fetch with API keys:', authState.apiKeys);
-      
-      if (!authState.isAuthenticated || Object.keys(authState.apiKeys).length === 0) {
-        console.log('❌ FETCH DEBUG - Not authenticated or no API keys, skipping fetch');
-        return null;
-      }
-
-      const userRoles: Record<string, any> = {};
-      const fetchResults: Record<string, any> = {};
-
-      // Fetch supplier data if supplier API key exists
-      if (authState.apiKeys.supplier) {
-        try {
-          console.log('🏪 FETCH DEBUG - Attempting to fetch supplier data with key:', authState.apiKeys.supplier.substring(0, 10) + '...');
-          const response = await fetch('http://localhost:8100/suppliers/me', {
-            headers: { 'X-API-Key': authState.apiKeys.supplier }
-          });
-          
-          console.log('🏪 FETCH DEBUG - Supplier response status:', response.status);
-          
-          if (response.ok) {
-            const supplierData = await response.json();
-            console.log('✅ FETCH DEBUG - Supplier data fetched successfully:', supplierData);
-            userRoles.supplier = supplierData;
-            fetchResults.supplier = { success: true, data: supplierData };
-          } else {
-            const errorText = await response.text();
-            console.error('❌ FETCH DEBUG - Supplier fetch failed:', response.status, response.statusText, errorText);
-            fetchResults.supplier = { success: false, status: response.status, error: errorText };
-          }
-        } catch (error) {
-          console.error('💥 FETCH DEBUG - Supplier fetch exception:', error);
-          fetchResults.supplier = { success: false, error: (error as Error).message };
-        }
-      } else {
-        console.log('⏭️ FETCH DEBUG - No supplier API key found');
-      }
-
-      // Fetch reviewer data if reviewer API key exists
-      if (authState.apiKeys.reviewer) {
-        try {
-          console.log('⭐ FETCH DEBUG - Attempting to fetch reviewer data with key:', authState.apiKeys.reviewer.substring(0, 10) + '...');
-          const response = await fetch('http://localhost:8100/reviewers/me', {
-            headers: { 'X-API-Key': authState.apiKeys.reviewer }
-          });
-          
-          console.log('⭐ FETCH DEBUG - Reviewer response status:', response.status);
-          
-          if (response.ok) {
-            const reviewerData = await response.json();
-            console.log('✅ FETCH DEBUG - Reviewer data fetched successfully:', reviewerData);
-            userRoles.reviewer = reviewerData;
-            fetchResults.reviewer = { success: true, data: reviewerData };
-          } else {
-            const errorText = await response.text();
-            console.error('❌ FETCH DEBUG - Reviewer fetch failed:', response.status, response.statusText, errorText);
-            fetchResults.reviewer = { success: false, status: response.status, error: errorText };
-          }
-        } catch (error) {
-          console.error('💥 FETCH DEBUG - Reviewer fetch exception:', error);
-          fetchResults.reviewer = { success: false, error: (error as Error).message };
-        }
-      } else {
-        console.log('⏭️ FETCH DEBUG - No reviewer API key found');
-      }
-
-      console.log('📊 FETCH DEBUG - Final fetch results:', fetchResults);
-      console.log('👤 FETCH DEBUG - Final user roles:', userRoles);
-      
-      // Store fetch results for debugging
-      (window as any).debugFetchResults = fetchResults;
-      
-      return userRoles;
+  // Registration form
+  const registerForm = useAuthForm<UserRegistration>(
+    {
+      username: '',
+      name: '',
+      email: '',
+      password: '',
+      repeat_password: '',
+      stellar_address: '',
+      roles: ['buyer'],
     },
-    enabled: authState.isAuthenticated && Object.keys(authState.apiKeys).length > 0,
-    retry: 1,
-    refetchOnWindowFocus: false,
-  });
-
-  // Update user roles in auth context when data is fetched
-  // But only if the data actually changed to prevent infinite loops
-  useEffect(() => {
-    if (userData) {
-      const userDataString = JSON.stringify(userData);
-      
-      // Only update if the data actually changed
-      if (userDataString !== lastUserRolesRef.current) {
-        console.log('🔄 CONTEXT UPDATE - User roles changed, updating context:', userData);
-        lastUserRolesRef.current = userDataString;
-        updateUserRoles(userData);
-      } else {
-        console.log('⏭️ CONTEXT UPDATE - User roles unchanged, skipping update');
+    async (data) => {
+      // Client-side validation
+      if (data.password !== data.repeat_password) {
+        throw new Error('Passwords do not match');
       }
+      if (data.roles.length === 0) {
+        throw new Error('Please select at least one role');
+      }
+      if (usernameState.status === 'taken' || emailState.status === 'taken') {
+        throw new Error('Please fix validation errors');
+      }
+      
+      await register(data);
     }
-  }, [userData]); // Remove updateUserRoles from dependencies to prevent infinite loop
+  );
 
-  const handleSignIn = (apiKeys: Record<string, string>) => {
-    console.log('Handling sign in with API keys:', apiKeys);
-    // Reset the ref when logging in
-    lastUserRolesRef.current = '';
-    login(apiKeys);
-  };
-
-  const handleAccountCreated = (apiKeys: Record<string, string> | string, userType?: 'supplier' | 'reviewer') => {
-    console.log('Handling account created:', apiKeys, userType);
-    
-    let finalApiKeys: Record<string, string>;
-    
-    if (typeof apiKeys === 'string') {
-      // Single API key
-      finalApiKeys = userType ? { [userType]: apiKeys } : { supplier: apiKeys };
-    } else {
-      // Multiple API keys
-      finalApiKeys = apiKeys;
+  // Set initial active role when user logs in
+  React.useEffect(() => {
+    if (user && user.roles.length > 0) {
+      setActiveRole(user.roles[0]);
     }
+  }, [user]);
+
+  // Debounced validation
+  React.useEffect(() => {
+    const timer = setTimeout(() => {
+      if (registerForm.formData.username.length >= 3) {
+        validateUsername(registerForm.formData.username);
+      }
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [registerForm.formData.username, validateUsername]);
+
+  React.useEffect(() => {
+    const timer = setTimeout(() => {
+      if (registerForm.formData.email.includes('@')) {
+        validateEmail(registerForm.formData.email);
+      }
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [registerForm.formData.email, validateEmail]);
+
+  // Handle role selection in registration
+  const handleRoleChange = (role: UserRole, checked: boolean) => {
+    const currentRoles = registerForm.formData.roles;
+    const newRoles = checked 
+      ? [...currentRoles, role]
+      : currentRoles.filter(r => r !== role);
     
-    console.log('Final API keys for new account:', finalApiKeys);
-    // Reset the ref when creating account
-    lastUserRolesRef.current = '';
-    login(finalApiKeys);
+    registerForm.updateField('roles', newRoles);
   };
 
-  const handleLogout = () => {
-    console.log('Logging out');
-    // Reset the ref when logging out
-    lastUserRolesRef.current = '';
-    logout();
-    setViewMode('signin');
-  };
-
-  const handleSwitchToRegister = () => {
-    setViewMode('register');
-  };
-
-  const handleSwitchToSignIn = () => {
-    setViewMode('signin');
-  };
-
-  // Debug error logging
-  useEffect(() => {
-    if (error) {
-      console.error('❌ QUERY ERROR:', error);
+  // Render role-specific content
+  const renderRoleContent = () => {
+    switch (activeRole) {
+      case 'buyer':
+        return (
+          <div>
+            <h3>Data Packages</h3>
+            <p>Browse and purchase data packages from our catalog.</p>
+            <a href="/" className="btn btn-primary" style={{ marginTop: '1rem', display: 'inline-block' }}>
+              Browse Catalog
+            </a>
+          </div>
+        );
+      case 'supplier':
+        return (
+          <div>
+            <h3>Your Data Packages</h3>
+            <p>Manage your uploaded data packages and track earnings.</p>
+            <p>No packages uploaded yet. Upload your first data package to start earning.</p>
+          </div>
+        );
+      case 'reviewer':
+        return (
+          <div>
+            <h3>Review Tasks</h3>
+            <p>Earn money by reviewing data quality.</p>
+            <p>No review tasks available at the moment. Check back later for new opportunities.</p>
+          </div>
+        );
+      default:
+        return <div>Select a role tab to view content.</div>;
     }
-  }, [error]);
+  };
 
-  // Show loading while auth context is initializing
-  if (authLoading) {
+  // Loading state
+  if (isLoading) {
     return (
-      <div className="py-12">
-        <div className="max-w-lg mx-auto">
-          <div className="bg-white rounded-lg border border-gray-200 p-8">
-            <div className="flex items-center justify-center py-12">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mr-3"></div>
-              <span className="text-gray-600">Initializing...</span>
+      <div className="profile-container">
+        <div className="loading">Loading...</div>
+      </div>
+    );
+  }
+
+  // Not authenticated - show auth forms
+  if (!isAuthenticated) {
+    return (
+      <div className="profile-container">
+        <div className="auth-section">
+          <div className="auth-header">
+            <h1 className="auth-title">Welcome to SquidPro</h1>
+            <p className="auth-subtitle">Sign in to your account or create a new one</p>
+          </div>
+
+          {/* Auth Tabs */}
+          <div className="auth-tabs">
+            <div 
+              className={`auth-tab ${authTab === 'login' ? 'active' : ''}`}
+              onClick={() => setAuthTab('login')}
+            >
+              Sign In
+            </div>
+            <div 
+              className={`auth-tab ${authTab === 'register' ? 'active' : ''}`}
+              onClick={() => setAuthTab('register')}
+            >
+              Create Account
             </div>
           </div>
+
+          {/* Error Messages */}
+          {(error || loginForm.errors.general || registerForm.errors.general) && (
+            <div className="message error">
+              {error || loginForm.errors.general || registerForm.errors.general}
+            </div>
+          )}
+
+          {/* Login Form */}
+          {authTab === 'login' && (
+            <form onSubmit={loginForm.handleSubmit} className="auth-form">
+              <div className="form-group">
+                <label className="form-label">Username</label>
+                <input 
+                  type="text" 
+                  className="form-input" 
+                  placeholder="Enter your username"
+                  value={loginForm.formData.username}
+                  onChange={(e) => loginForm.updateField('username', e.target.value)}
+                  required
+                />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Password</label>
+                <input 
+                  type="password" 
+                  className="form-input" 
+                  placeholder="Enter your password"
+                  value={loginForm.formData.password}
+                  onChange={(e) => loginForm.updateField('password', e.target.value)}
+                  required
+                />
+              </div>
+              <button 
+                type="submit" 
+                className="auth-btn" 
+                disabled={loginForm.isSubmitting}
+              >
+                {loginForm.isSubmitting ? 'Signing in...' : 'Sign In'}
+              </button>
+            </form>
+          )}
+
+          {/* Registration Form */}
+          {authTab === 'register' && (
+            <form onSubmit={registerForm.handleSubmit} className="auth-form">
+              <div className="form-group">
+                <label className="form-label">Username</label>
+                <input 
+                  type="text" 
+                  className="form-input" 
+                  placeholder="Choose a username"
+                  value={registerForm.formData.username}
+                  onChange={(e) => registerForm.updateField('username', e.target.value)}
+                  required
+                />
+                {usernameState.message && (
+                  <div className={`validation-message ${usernameState.status}`}>
+                    {usernameState.message}
+                  </div>
+                )}
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Full Name</label>
+                <input 
+                  type="text" 
+                  className="form-input" 
+                  placeholder="Enter your full name"
+                  value={registerForm.formData.name}
+                  onChange={(e) => registerForm.updateField('name', e.target.value)}
+                  required
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Email</label>
+                <input 
+                  type="email" 
+                  className="form-input" 
+                  placeholder="Enter your email"
+                  value={registerForm.formData.email}
+                  onChange={(e) => registerForm.updateField('email', e.target.value)}
+                  required
+                />
+                {emailState.message && (
+                  <div className={`validation-message ${emailState.status}`}>
+                    {emailState.message}
+                  </div>
+                )}
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Password</label>
+                <input 
+                  type="password" 
+                  className="form-input" 
+                  placeholder="Choose a password (min 8 characters)"
+                  value={registerForm.formData.password}
+                  onChange={(e) => registerForm.updateField('password', e.target.value)}
+                  required
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Repeat Password</label>
+                <input 
+                  type="password" 
+                  className="form-input" 
+                  placeholder="Repeat your password"
+                  value={registerForm.formData.repeat_password}
+                  onChange={(e) => registerForm.updateField('repeat_password', e.target.value)}
+                  required
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Stellar Address</label>
+                <input 
+                  type="text" 
+                  className="form-input" 
+                  placeholder="Your Stellar wallet address (starts with G)"
+                  value={registerForm.formData.stellar_address}
+                  onChange={(e) => registerForm.updateField('stellar_address', e.target.value)}
+                  required
+                />
+              </div>
+
+              <div className="checkbox-group">
+                <label className="checkbox-label">Choose Your Roles:</label>
+                <div className="checkbox-options">
+                  <div className="checkbox-option">
+                    <input 
+                      type="checkbox" 
+                      id="role-buyer" 
+                      checked={registerForm.formData.roles.includes('buyer')}
+                      onChange={(e) => handleRoleChange('buyer', e.target.checked)}
+                    />
+                    <label htmlFor="role-buyer">Buyer - Purchase data from suppliers</label>
+                  </div>
+                  <div className="checkbox-option">
+                    <input 
+                      type="checkbox" 
+                      id="role-supplier" 
+                      checked={registerForm.formData.roles.includes('supplier')}
+                      onChange={(e) => handleRoleChange('supplier', e.target.checked)}
+                    />
+                    <label htmlFor="role-supplier">Supplier - Sell your data</label>
+                  </div>
+                  <div className="checkbox-option">
+                    <input 
+                      type="checkbox" 
+                      id="role-reviewer" 
+                      checked={registerForm.formData.roles.includes('reviewer')}
+                      onChange={(e) => handleRoleChange('reviewer', e.target.checked)}
+                    />
+                    <label htmlFor="role-reviewer">Reviewer - Earn by reviewing data quality</label>
+                  </div>
+                </div>
+              </div>
+
+              <button 
+                type="submit" 
+                className="auth-btn" 
+                disabled={registerForm.isSubmitting}
+              >
+                {registerForm.isSubmitting ? 'Creating Account...' : 'Create Account'}
+              </button>
+            </form>
+          )}
         </div>
       </div>
     );
   }
 
-  // If authenticated, show unified dashboard
-  if (authState.isAuthenticated) {
-    console.log('🎯 RENDER DEBUG - Rendering dashboard:', {
-      isLoading,
-      userData,
-      authStateUserRoles: authState.userRoles,
-      error
-    });
-    
-    if (isLoading) {
-      return (
-        <div className="py-12">
-          <div className="max-w-lg mx-auto">
-            <div className="bg-white rounded-lg border border-gray-200 p-8">
-              <div className="flex items-center justify-center py-12">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mr-3"></div>
-                <div className="text-center">
-                  <span className="text-gray-600 block">Loading your dashboard...</span>
-                  <span className="text-xs text-gray-500 mt-2 block">
-                    API Keys: {Object.keys(authState.apiKeys).join(', ')}
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      );
-    }
-
-    if (error) {
-      return (
-        <div className="py-12">
-          <div className="max-w-lg mx-auto">
-            <div className="bg-white rounded-lg border border-gray-200 p-8">
-              <div className="text-center py-12">
-                <div className="text-red-600 mb-4">
-                  <p className="font-medium">Failed to load dashboard</p>
-                  <p className="text-sm">{(error as Error).message}</p>
-                </div>
-                <div className="bg-gray-50 border border-gray-200 rounded-md p-3 mb-4 text-left">
-                  <p className="text-xs text-gray-600 mb-2"><strong>Debug Info:</strong></p>
-                  <p className="text-xs text-gray-600">API Keys: {Object.keys(authState.apiKeys).join(', ')}</p>
-                  <p className="text-xs text-gray-600">
-                    Check browser console for detailed fetch results
-                  </p>
-                </div>
-                <div className="space-y-3">
-                  <button
-                    onClick={() => refetch()}
-                    className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 mr-3"
-                  >
-                    Retry
-                  </button>
-                  <button
-                    onClick={handleLogout}
-                    className="bg-gray-600 text-white px-4 py-2 rounded-md hover:bg-gray-700"
-                  >
-                    Sign Out
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      );
-    }
-
-    return (
-      <Dashboard 
-        userRoles={userData || authState.userRoles}
-        apiKeys={authState.apiKeys}
-        onLogout={handleLogout}
-      />
-    );
-  }
-
-  // If not authenticated, show auth forms
+  // Authenticated - show dashboard
   return (
-    <div className="py-12">
-      <div className="max-w-lg mx-auto">
-        <div className="bg-white rounded-lg border border-gray-200 p-8">
-          <div className="text-center mb-8">
-            <h1 className="text-2xl font-bold text-gray-900 mb-2">SquidPro Account</h1>
-            <p className="text-gray-600">
-              {viewMode === 'signin' 
-                ? 'Sign in to your account' 
-                : 'Create your account and start earning'
-              }
-            </p>
+    <div className="profile-container">
+      <div className="dashboard-section">
+        <div className="dashboard-header">
+          <div className="user-info">
+            <h1>{user!.name}</h1>
+            <p className="user-subtitle">@{user!.username} • {user!.roles.join(', ')}</p>
           </div>
+          <button className="logout-btn" onClick={logout}>
+            Logout
+          </button>
+        </div>
 
-          {/* Auth Mode Toggle */}
-          <div className="flex mb-6 bg-gray-100 rounded-lg p-1">
-            <button
-              onClick={handleSwitchToSignIn}
-              className={`flex-1 py-2 px-3 text-sm font-medium rounded-md transition-colors ${
-                viewMode === 'signin'
-                  ? 'bg-white text-gray-900 shadow'
-                  : 'text-gray-600 hover:text-gray-900'
-              }`}
+        {/* Role Tabs */}
+        <div className="role-tabs">
+          {user!.roles.map((role) => (
+            <div 
+              key={role}
+              className={`role-tab ${activeRole === role ? 'active' : ''}`}
+              onClick={() => setActiveRole(role)}
             >
-              Sign In
-            </button>
-            <button
-              onClick={handleSwitchToRegister}
-              className={`flex-1 py-2 px-3 text-sm font-medium rounded-md transition-colors ${
-                viewMode === 'register'
-                  ? 'bg-white text-gray-900 shadow'
-                  : 'text-gray-600 hover:text-gray-900'
-              }`}
-            >
-              Create Account
-            </button>
+              {role.charAt(0).toUpperCase() + role.slice(1)}
+            </div>
+          ))}
+        </div>
+
+        {/* Stats Grid */}
+        <div className="stats-grid">
+          <div className="stat-card">
+            <div className="stat-value">{user!.roles.length}</div>
+            <div className="stat-label">Active Roles</div>
           </div>
+          <div className="stat-card">
+            <div className="stat-value">API Key</div>
+            <div className="stat-label">
+              <div className="api-key-display">{user!.api_key}</div>
+              <small>Use this for programmatic access</small>
+            </div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-value">Active</div>
+            <div className="stat-label">Account Status</div>
+          </div>
+        </div>
 
-          {/* Render appropriate component */}
-          {viewMode === 'signin' ? (
-            <SignIn 
-              onSignIn={handleSignIn}
-              onSwitchToRegister={handleSwitchToRegister}
-            />
-          ) : (
-            <CreateAccount 
-              onAccountCreated={handleAccountCreated}
-              onSwitchToSignIn={handleSwitchToSignIn}
-            />
-          )}
-
-          <div className="mt-8 text-center">
-            <button
-              onClick={onBack}
-              className="text-gray-600 hover:text-gray-900 text-sm"
-            >
-              ← Back to Catalog
-            </button>
+        {/* Content Section */}
+        <div className="content-section">
+          <div className="section-content">
+            {renderRoleContent()}
           </div>
         </div>
       </div>

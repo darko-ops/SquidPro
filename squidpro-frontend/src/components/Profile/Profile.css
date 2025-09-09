@@ -1,0 +1,477 @@
+/* Profile.css - Styles for SquidPro Profile Component */
+
+.profile-container {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 2rem;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    color: #000000;
+    background: #ffffff;
+    min-height: 100vh;
+  }
+  
+  /* Loading */
+  .loading {
+    text-align: center;
+    padding: 3rem;
+    color: #666666;
+    font-size: 1.1rem;
+  }
+  
+  /* Authentication Section */
+  .auth-section {
+    max-width: 500px;
+    margin: 0 auto;
+    padding: 3rem 2rem;
+    border: 1px solid #f0f0f0;
+    background: #fafafa;
+  }
+  
+  .auth-header {
+    text-align: center;
+    margin-bottom: 2rem;
+  }
+  
+  .auth-title {
+    font-size: 2rem;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+    color: #000000;
+  }
+  
+  .auth-subtitle {
+    color: #666666;
+    font-size: 0.9rem;
+  }
+  
+  /* Auth Tabs */
+  .auth-tabs {
+    display: flex;
+    margin-bottom: 2rem;
+    border-bottom: 1px solid #e0e0e0;
+  }
+  
+  .auth-tab {
+    flex: 1;
+    padding: 1rem;
+    text-align: center;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: all 0.2s ease;
+    color: #666666;
+  }
+  
+  .auth-tab.active {
+    border-bottom-color: #00bcd4;
+    color: #00bcd4;
+    font-weight: 500;
+  }
+  
+  .auth-tab:hover {
+    color: #000000;
+  }
+  
+  /* Forms */
+  .auth-form {
+    width: 100%;
+  }
+  
+  .form-group {
+    margin-bottom: 1.5rem;
+  }
+  
+  .form-label {
+    display: block;
+    font-size: 0.875rem;
+    font-weight: 500;
+    margin-bottom: 0.5rem;
+    color: #000000;
+  }
+  
+  .form-input {
+    width: 100%;
+    padding: 0.75rem 1rem;
+    border: 1px solid #e0e0e0;
+    background: #ffffff;
+    font-size: 0.9rem;
+    color: #000000;
+    transition: border-color 0.2s ease;
+    font-family: inherit;
+  }
+  
+  .form-input:focus {
+    outline: none;
+    border-color: #00bcd4;
+    box-shadow: 0 0 0 2px rgba(0, 188, 212, 0.1);
+  }
+  
+  .form-input::placeholder {
+    color: #999999;
+  }
+  
+  /* Validation Messages */
+  .validation-message {
+    font-size: 0.75rem;
+    margin-top: 0.25rem;
+  }
+  
+  .validation-message.checking {
+    color: #999999;
+  }
+  
+  .validation-message.available {
+    color: #00c851;
+  }
+  
+  .validation-message.taken {
+    color: #ff5252;
+  }
+  
+  .validation-message.error {
+    color: #ff5252;
+  }
+  
+  /* Checkboxes */
+  .checkbox-group {
+    margin-bottom: 1.5rem;
+  }
+  
+  .checkbox-label {
+    display: block;
+    font-size: 0.875rem;
+    font-weight: 500;
+    margin-bottom: 0.75rem;
+    color: #000000;
+  }
+  
+  .checkbox-options {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  
+  .checkbox-option {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
+  }
+  
+  .checkbox-option input[type="checkbox"] {
+    margin-top: 0.25rem;
+    accent-color: #00bcd4;
+  }
+  
+  .checkbox-option label {
+    font-size: 0.875rem;
+    color: #000000;
+    cursor: pointer;
+    line-height: 1.4;
+  }
+  
+  /* Buttons */
+  .auth-btn {
+    width: 100%;
+    padding: 1rem;
+    background: #000000;
+    color: #ffffff;
+    border: none;
+    font-size: 0.9rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+    font-family: inherit;
+  }
+  
+  .auth-btn:hover:not(:disabled) {
+    background: #333333;
+  }
+  
+  .auth-btn:disabled {
+    background: #999999;
+    cursor: not-allowed;
+  }
+  
+  .btn {
+    padding: 0.75rem 1.5rem;
+    border: 1px solid #000000;
+    background: transparent;
+    color: #000000;
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    text-decoration: none;
+    display: inline-block;
+    transition: all 0.2s ease;
+    font-family: inherit;
+  }
+  
+  .btn-primary {
+    background: #000000;
+    color: #ffffff;
+  }
+  
+  .btn-primary:hover {
+    background: #333333;
+  }
+  
+  .btn:hover {
+    border-color: #00bcd4;
+    color: #00bcd4;
+  }
+  
+  /* Messages */
+  .message {
+    padding: 1rem;
+    margin: 1rem 0;
+    font-size: 0.875rem;
+    border-radius: 4px;
+  }
+  
+  .message.error {
+    background: rgba(255, 82, 82, 0.1);
+    border: 1px solid #ff5252;
+    color: #d32f2f;
+  }
+  
+  .message.success {
+    background: rgba(0, 200, 81, 0.1);
+    border: 1px solid #00c851;
+    color: #2e7d32;
+  }
+  
+  .message.warning {
+    background: rgba(255, 193, 7, 0.1);
+    border: 1px solid #ffc107;
+    color: #f57c00;
+  }
+  
+  /* Dashboard Section */
+  .dashboard-section {
+    width: 100%;
+  }
+  
+  .dashboard-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 3rem;
+    padding-bottom: 2rem;
+    border-bottom: 1px solid #f0f0f0;
+  }
+  
+  .user-info h1 {
+    font-size: 2rem;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+    color: #000000;
+  }
+  
+  .user-subtitle {
+    color: #666666;
+    font-size: 1rem;
+  }
+  
+  .logout-btn {
+    padding: 0.5rem 1rem;
+    background: transparent;
+    border: 1px solid #e0e0e0;
+    color: #666666;
+    cursor: pointer;
+    font-size: 0.875rem;
+    transition: all 0.2s ease;
+    font-family: inherit;
+  }
+  
+  .logout-btn:hover {
+    border-color: #ff5252;
+    color: #ff5252;
+  }
+  
+  /* Role Tabs */
+  .role-tabs {
+    display: flex;
+    margin-bottom: 2rem;
+    border-bottom: 1px solid #f0f0f0;
+  }
+  
+  .role-tab {
+    padding: 1rem 2rem;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: all 0.2s ease;
+    color: #666666;
+    font-weight: 500;
+  }
+  
+  .role-tab.active {
+    border-bottom-color: #00bcd4;
+    color: #00bcd4;
+  }
+  
+  .role-tab:hover {
+    color: #000000;
+  }
+  
+  /* Stats Grid */
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 2rem;
+    margin-bottom: 3rem;
+  }
+  
+  .stat-card {
+    padding: 2rem;
+    border: 1px solid #f0f0f0;
+    background: #fafafa;
+  }
+  
+  .stat-value {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: #00bcd4;
+    margin-bottom: 0.5rem;
+  }
+  
+  .stat-label {
+    color: #666666;
+    font-size: 0.875rem;
+    font-weight: 500;
+  }
+  
+  .api-key-display {
+    background: #f8f8f8;
+    padding: 1rem;
+    border: 1px solid #e0e0e0;
+    margin: 0.5rem 0;
+    font-family: 'Monaco', 'Menlo', monospace;
+    font-size: 0.75rem;
+    word-break: break-all;
+    color: #333333;
+  }
+  
+  /* Content Section */
+  .content-section {
+    margin-bottom: 3rem;
+  }
+  
+  .section-content {
+    border: 1px solid #f0f0f0;
+    background: #fafafa;
+    padding: 2rem;
+  }
+  
+  .section-content h3 {
+    font-size: 1.5rem;
+    font-weight: 600;
+    margin-bottom: 1rem;
+    color: #000000;
+  }
+  
+  .section-content p {
+    color: #666666;
+    line-height: 1.6;
+    margin-bottom: 1rem;
+  }
+  
+  /* Responsive Design */
+  @media (max-width: 768px) {
+    .profile-container {
+      padding: 1rem;
+    }
+  
+    .auth-section {
+      padding: 2rem 1rem;
+    }
+  
+    .dashboard-header {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 1rem;
+    }
+  
+    .stats-grid {
+      grid-template-columns: 1fr;
+    }
+  
+    .role-tabs {
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+  
+    .role-tab {
+      white-space: nowrap;
+      min-width: max-content;
+    }
+  
+    .checkbox-option {
+      align-items: flex-start;
+    }
+  
+    .checkbox-option label {
+      flex: 1;
+    }
+  }
+  
+  @media (max-width: 480px) {
+    .profile-container {
+      padding: 0.5rem;
+    }
+  
+    .auth-title {
+      font-size: 1.5rem;
+    }
+  
+    .user-info h1 {
+      font-size: 1.5rem;
+    }
+  
+    .stat-card {
+      padding: 1.5rem;
+    }
+  
+    .section-content {
+      padding: 1.5rem;
+    }
+  }
+  
+  /* Focus styles for accessibility */
+  .auth-tab:focus,
+  .role-tab:focus,
+  .form-input:focus,
+  .auth-btn:focus,
+  .btn:focus,
+  .logout-btn:focus {
+    outline: 2px solid #00bcd4;
+    outline-offset: 2px;
+  }
+  
+  /* Loading states */
+  .auth-btn:disabled {
+    position: relative;
+  }
+  
+  .auth-btn:disabled::after {
+    content: '';
+    position: absolute;
+    width: 16px;
+    height: 16px;
+    margin: auto;
+    border: 2px solid transparent;
+    border-top-color: #ffffff;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    right: 0;
+  }
+  
+  @keyframes spin {
+    0% {
+      transform: rotate(0deg);
+    }
+    100% {
+      transform: rotate(360deg);
+    }
+  }
