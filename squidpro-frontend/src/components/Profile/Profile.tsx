@@ -43,32 +43,42 @@ const Profile: React.FC<ProfileProps> = ({ onBack }) => {
             // Organize user data by roles
             const roles: Record<string, any> = {};
             
+            // Create unified user object for all roles
+            const baseUserData = {
+              id: userData.id,
+              name: userData.name,
+              email: userData.email,
+              stellar_address: userData.stellar_address,
+              created_at: userData.created_at,
+              session_token: authState.sessionToken
+            };
+            
             // Check if user has supplier role
             if (userData.roles.includes('supplier')) {
               roles.supplier = {
-                id: userData.id,
-                name: userData.name,
-                email: userData.email,
-                stellar_address: userData.stellar_address,
+                ...baseUserData,
                 balance: userData.supplier_stats?.balance || 0,
                 package_count: userData.supplier_stats?.package_count || 0,
-                created_at: userData.created_at,
-                api_key: userData.api_key
+                type: 'supplier'
               };
             }
             
             // Check if user has reviewer role  
             if (userData.roles.includes('reviewer')) {
               roles.reviewer = {
-                id: userData.id,
-                name: userData.name,
-                email: userData.email,
-                stellar_address: userData.stellar_address,
+                ...baseUserData,
                 balance: userData.reviewer_stats?.balance || 0,
                 reputation_level: userData.reviewer_stats?.reputation_level || 'novice',
                 stats: userData.reviewer_stats || {},
-                created_at: userData.created_at,
-                api_key: userData.api_key
+                type: 'reviewer'
+              };
+            }
+
+            // Check if user has buyer role (everyone should have this)
+            if (userData.roles.includes('buyer')) {
+              roles.buyer = {
+                ...baseUserData,
+                type: 'buyer'
               };
             }
             
@@ -76,7 +86,7 @@ const Profile: React.FC<ProfileProps> = ({ onBack }) => {
             setUserRoles(roles);
             updateUserRoles(roles);
             
-            // Show welcome screen
+            // Show welcome screen for first-time sign in, or dashboard if returning
             setCurrentView('welcome');
             
           } else {
@@ -224,6 +234,19 @@ const Profile: React.FC<ProfileProps> = ({ onBack }) => {
               </div>
             </div>
           </div>
+
+          {/* Debug Info for Development */}
+          {process.env.NODE_ENV === 'development' && (
+            <div className="mt-4 bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+              <h4 className="text-sm font-medium text-yellow-800 mb-2">Debug Info</h4>
+              <div className="text-xs text-yellow-700 space-y-1">
+                <p><strong>Current View:</strong> {currentView}</p>
+                <p><strong>Is Authenticated:</strong> {authState.isAuthenticated.toString()}</p>
+                <p><strong>Session Token:</strong> {authState.sessionToken ? 'Present' : 'None'}</p>
+                <p><strong>User Roles:</strong> {Object.keys(userRoles).join(', ') || 'None'}</p>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     );
